@@ -50,19 +50,27 @@ sequenceDiagram
     Service->>DB: read this week's BUY recommendations
     DB-->>Service: return list
 
-    Service->>Service: divide amount equally across recommended stocks
-    Service->>DB: decrypt user's Alpaca API key
-    DB-->>Service: return decrypted key
+    Service->>Alpaca: GET /account (check buying_power)
+    Alpaca-->>Service: return { buying_power }
 
-    loop for each stock
-        Service->>Alpaca: POST /orders { symbol, notional: amount_per_stock, side: buy, type: market }
-        Alpaca-->>Service: return { order_id, filled_price, filled_qty }
-        Service->>DB: save to TRADE table
-        DB-->>Service: confirm saved
+    alt buying_power >= amount
+        Service->>Service: divide amount equally across recommended stocks
+        Service->>DB: decrypt user's Alpaca API key
+        DB-->>Service: return decrypted key
+
+        loop for each stock
+            Service->>Alpaca: POST /orders { symbol, notional: amount_per_stock, side: buy, type: market }
+            Alpaca-->>Service: return { order_id, filled_price, filled_qty }
+            Service->>DB: save to TRADE table
+            DB-->>Service: confirm saved
+        end
+
+        Service-->>Controller: return trade results
+        Controller-->>User: { trades: [ { symbol, amount_invested, shares_bought, price } ] }
+    else insufficient balance
+        Service-->>Controller: error "Insufficient balance"
+        Controller-->>User: { error: "Insufficient balance in your Alpaca account" }
     end
-
-    Service-->>Controller: return trade results
-    Controller-->>User: { trades: [ { symbol, amount_invested, shares_bought, price } ] }
 ```
 
 ## 3. User Sell Flow

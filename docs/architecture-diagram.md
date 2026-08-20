@@ -1,24 +1,32 @@
 # Architecture Diagram
 
 ```mermaid
-flowchart TD
-    Users[Users]
-    Scheduler[Scheduler]
+graph TD
+    UserA[User A]
+    UserB[User B]
+    UserN[User N]
+
+    Auth[Supabase Auth]
     Controller[API Controller]
+    Scheduler[Scheduler]
     Service[Service Layer]
-    Algorithm[Algorithm]
-    DB[(PostgreSQL<br/>8 tables)]
-    AlpacaFetch[Alpaca API<br/>fetch prices - system key]
-    AlpacaTrade[Alpaca API<br/>place trades - user key]
+    DB[(PostgreSQL DB)]
+    Alpaca[Alpaca API]
     Email[Email Service]
 
-    Users --> Controller
-    Controller --> Service
-    Service --> Algorithm
-    Scheduler -->|weekly trigger| Service
+    UserA --> Controller
+    UserB --> Controller
+    UserN --> Controller
 
-    Service --> DB
-    Service --> AlpacaFetch
-    Service --> AlpacaTrade
-    Service --> Email
+    Auth --> Controller
+
+    Scheduler -->|weekly trigger| Service
+    Controller --> Service
+
+    Service -->|read/write stocks, prices, recommendations, trades, users| DB
+
+    Service -->|"Fetch price history (System Key)"| Alpaca
+    Service -->|"Place orders / Get positions / Get account (User Key)"| Alpaca
+
+    Service -->|send weekly recommendation notifications| Email
 ```

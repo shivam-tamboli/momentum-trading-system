@@ -7,88 +7,123 @@ sequenceDiagram
     participant Scheduler
     participant Service
     participant DB
-    participant Alpaca
+    participant Alpaca as Alpaca (System Key)
+    participant Email
 
     Scheduler->>Service: trigger weekly job
-    Service->>DB: read stocks
-    Service->>Alpaca: fetch 6mo prices (system key)
-    Alpaca-->>Service: price data
-    Service->>DB: store STOCK_PRICE
-    Service->>DB: read AlgorithmConfig weights
-    Service->>Service: run momentum formula
-    Service->>Service: rank stocks
-    Service->>DB: save top 10 BUY
-    Service->>DB: save bottom 10 SELL
-    Service->>Users: send email
-```
+    Service->>DB: read all stocks from STOCK table
+    DB-->>Service: return stock list
 
-## 2. User Investment Flow
-
-```mermaid
-sequenceDiagram
-    participant User
-    participant Controller
-    participant Service
-    participant DB
-    participant Alpaca
-
-    User->>Controller: invest amount
-    Controller->>Service: process investment
-    Service->>DB: check Wallet balance
-    alt sufficient balance
-        Service->>DB: read BUY recommendations
-        Service->>Service: divide amount equally
-        loop each stock
-            Service->>Service: decrypt user Alpaca key
-            Service->>Alpaca: place buy order (user key)
-            Alpaca-->>Service: order confirmed
-            Service->>DB: save Trade
-            Service->>DB: update Position
-        end
-        Service->>DB: update Wallet
-        Service->>User: send email
-    else insufficient balance
-        Service-->>Controller: error
+    loop for each stock
+        Service->>Alpaca: fetch 6 months price history
+        Alpaca-->>Service: return closing prices
+        Service->>DB: store in STOCK_PRICE
+        DB-->>Service: confirm stored
     end
+
+    Service->>Service: calculate ret_6m, ret_3m, ret_1m from prices
+    Service->>Service: apply formula momentum_score = 0.5*ret_6m + 0.3*ret_3m + 0.2*ret_1m - 0.1*vol_3m
+    Service->>Service: rank stocks per index, top 10 = BUY, bottom 10 = SELL, rest = HOLD
+
+    Service->>DB: save recommendations to RECOMMENDATION table
+    DB-->>Service: confirm saved
+
+    Service->>Email: notify all users "new recommendations ready"
+    Email-->>Service: confirm sent
 ```
 
-## 3. User Registration Flow
+## 2. User Buy Flow
 
 ```mermaid
 sequenceDiagram
     participant User
     participant Controller
-    participant Service
     participant DB
+    participant Service
+    participant Alpaca as Alpaca (User Key)
 
-    User->>Controller: submit details
-    Controller->>Service: register user
-    Service->>Service: hash password
-    Service->>Service: encrypt Alpaca key (AES-256)
-    Service->>DB: save User
-    Service->>DB: create Wallet
-    Service-->>User: registration success
+    User->>Controller: POST /:userId/trade/buy { amount: 500 }
+    Controller->>DB: verify userId exists
+    DB-->>Controller: return user record
+    Controller->>Service: process buy
+
+    Service->>DB: read this week's BUY recommendations
+    DB-->>Service: return list
+
+    Service->>Service: divide amount equally across recommended stocks
+    Service->>DB: decrypt user's Alpaca API key
+    DB-->>Service: return decrypted key
+
+    loop for each stock
+        Service->>Alpaca: POST /orders { symbol, notional: amount_per_stock, side: buy, type: market }
+        Alpaca-->>Service: return { order_id, filled_price, filled_qty }
+        Service->>DB: save to TRADE table
+        DB-->>Service: confirm saved
+    end
+
+    Service-->>Controller: return trade results
+    Controller-->>User: { trades: [ { symbol, amount_invested, shares_bought, price } ] }
 ```
 
-## 4. Weekly Sell Flow
+## 3. User Sell Flow
 
 ```mermaid
 sequenceDiagram
     participant User
-    participant Service
+    participant Controller
     participant DB
-    participant Alpaca
+    participant Service
+    participant Alpaca as Alpaca (User Key)
 
-    User->>Service: what to sell?
-    Service->>DB: read SELL recommendations
-    Service->>DB: read user Positions
-    Service->>Service: compare matches
-    Service-->>User: show matches
-    User->>Service: confirm sell
-    Service->>Alpaca: place sell orders (user key)
-    Alpaca-->>Service: orders confirmed
-    Service->>DB: save Trades
-    Service->>DB: remove Positions
-    Service->>DB: update Wallet
-    Service->>User: send email
+    User->>Controller: POST /:userId/trade/sell
+    Controller->>DB: verify userId exists
+    DB-->>Controller: return user
+
+    Controller->>Service: process sell
+
+    Service->>DB: read this week's SELL recommendations
+    DB-->>Service: return sell list
+
+    Service->>DB: decrypt user's Alpaca API key
+    DB-->>Service: return decrypted key
+
+    Service->>Alpaca: GET /positions
+    Alpaca-->>Service: return user's current positions
+
+    Service->>Service: find intersection - stocks user holds that are also on SELL list
+
+    loop for each matched stock
+        Service->>Alpaca: POST /orders { symbol, qty, side: sell, type: market }
+        Alpaca-->>Service: return { order_id, filled_price, filled_qty }
+        Service->>DB: save to TRADE table
+        DB-->>Service: confirm saved
+    end
+
+    Service-->>Controller: return results
+    Controller-->>User: { trades: [ { symbol, shares_sold, amount_received } ] }
+```
+
+## 4. Get Account Info Flow
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Controller
+    participant DB
+    participant Service
+    participant Alpaca as Alpaca (User Key)
+
+    User->>Controller: GET /:userId/account
+    Controller->>DB: verify userId exists, get user record
+    DB-->>Controller: return user
+
+    Controller->>Service: get account info
+    Service->>DB: decrypt user's Alpaca API key
+    DB-->>Service: return decrypted key
+
+    Service->>Alpaca: GET /account
+    Alpaca-->>Service: return { cash, buying_power, portfolio_value }
+
+    Service-->>Controller: return account data
+    Controller-->>User: { cash, buying_power, portfolio_value }
 ```

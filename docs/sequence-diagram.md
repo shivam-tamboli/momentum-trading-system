@@ -100,15 +100,20 @@ sequenceDiagram
 
     Service->>Service: find intersection - stocks user holds that are also on SELL list
 
-    loop for each matched stock
-        Service->>Alpaca: POST /orders { symbol, qty, side: sell, type: market }
-        Alpaca-->>Service: return { order_id, filled_price, filled_qty }
-        Service->>DB: save to TRADE table
-        DB-->>Service: confirm saved
-    end
+    alt matches found
+        loop for each matched stock
+            Service->>Alpaca: POST /orders { symbol, qty, side: sell, type: market }
+            Alpaca-->>Service: return { order_id, filled_price, filled_qty }
+            Service->>DB: save to TRADE table
+            DB-->>Service: confirm saved
+        end
 
-    Service-->>Controller: return results
-    Controller-->>User: { trades: [ { symbol, shares_sold, amount_received } ] }
+        Service-->>Controller: return results
+        Controller-->>User: { trades: [ { symbol, shares_sold, amount_received } ] }
+    else no matches
+        Service-->>Controller: no positions to sell
+        Controller-->>User: { message: "No positions match this week's sell recommendations" }
+    end
 ```
 
 ## 4. Get Account Info Flow

@@ -6,6 +6,7 @@ erDiagram
     STOCK ||--o{ STOCK_PRICE : has
     STOCK ||--o{ RECOMMENDATION : has
     STOCK ||--o{ TRADE : involves
+    RECOMMENDATION ||--o{ TRADE : "triggers many"
 
     USER {
         int id PK
@@ -44,6 +45,7 @@ erDiagram
         int id PK
         int user_id FK
         int stock_id FK
+        int recommendation_id FK
         string action
         decimal amount
         decimal price_per_share

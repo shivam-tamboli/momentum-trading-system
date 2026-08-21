@@ -47,6 +47,34 @@ README.md
 
 All system diagrams and specifications are in the `docs/` folder.
 
+## Progress
+
+### ✅ Completed
+- **Project Setup** — Spring Boot 3.3.4, Java 21, all dependencies configured (`pom.xml`, `application.properties`)
+- **JPA Entity Models** — 5 entity classes mapping to database tables:
+  - `User` — stores user account and encrypted Alpaca API credentials
+  - `Stock` — stores tracked stocks from S&P 500, S&P 400, S&P 600, Nasdaq 100
+  - `StockPrice` — stores daily closing prices fetched from Alpaca
+  - `Recommendation` — stores weekly BUY/SELL/HOLD recommendations per stock per index
+  - `Trade` — stores every executed trade as an audit log
+- **Enum** — `ActionType` (BUY, SELL, HOLD) for type-safe action fields
+- **Repositories** — 5 Spring Data JPA repositories (zero SQL written):
+  - `UserRepository`, `StockRepository`, `StockPriceRepository`, `RecommendationRepository`, `TradeRepository`
+
+### 🔄 In Progress
+- Nothing currently in progress
+
+### 📋 Up Next
+- AES-256 encryption utility (for storing user Alpaca keys)
+- Supabase JWT authentication filter
+- Alpaca API client configuration
+- Momentum algorithm service
+- Weekly scheduler
+- Trade service (buy and sell flows)
+- Controllers (9 API endpoints)
+- Email notification service
+- Stock seeder (populate STOCK table)
+
 ## Environment Variables Required
 
 ALPACA_SYSTEM_API_KEY=

@@ -253,7 +253,51 @@ SUPABASE_ANON_KEY=
 
 ---
 
-## 12. Key Rules — Read Before Writing Any Code
+## 12. Maven Dependencies (Add to pom.xml)
+
+```xml
+<!-- Alpaca Java SDK -->
+<dependency>
+    <groupId>net.jacobpeterson</groupId>
+    <artifactId>alpaca-java</artifactId>
+    <version>10.1</version>
+</dependency>
+
+<!-- Spring Boot Starter Web -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+</dependency>
+
+<!-- Spring Boot Starter Data JPA -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-data-jpa</artifactId>
+</dependency>
+
+<!-- Spring Boot Starter Mail -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-mail</artifactId>
+</dependency>
+
+<!-- PostgreSQL Driver -->
+<dependency>
+    <groupId>org.postgresql</groupId>
+    <artifactId>postgresql</artifactId>
+</dependency>
+
+<!-- Supabase JWT Validation -->
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-api</artifactId>
+    <version>0.12.3</version>
+</dependency>
+```
+
+---
+
+## 13. Key Rules — Read Before Writing Any Code
 
 1. Never create a Wallet table. Alpaca tracks user balance.
 2. Never create a Position table. Alpaca tracks user positions.

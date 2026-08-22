@@ -293,6 +293,12 @@ SUPABASE_ANON_KEY=
     <artifactId>jjwt-api</artifactId>
     <version>0.12.3</version>
 </dependency>
+
+<!-- Spring Security -->
+<dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-security</artifactId>
+</dependency>
 ```
 
 ---

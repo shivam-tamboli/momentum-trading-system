@@ -299,6 +299,14 @@ SUPABASE_ANON_KEY=
     <groupId>org.springframework.boot</groupId>
     <artifactId>spring-boot-starter-security</artifactId>
 </dependency>
+
+<!-- Lombok (pinned to 1.18.42 — required for JDK 21 annotation processing compatibility) -->
+<dependency>
+    <groupId>org.projectlombok</groupId>
+    <artifactId>lombok</artifactId>
+    <version>1.18.42</version>
+    <optional>true</optional>
+</dependency>
 ```
 
 ---

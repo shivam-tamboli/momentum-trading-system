@@ -260,7 +260,7 @@ SUPABASE_ANON_KEY=
 <dependency>
     <groupId>net.jacobpeterson</groupId>
     <artifactId>alpaca-java</artifactId>
-    <version>10.1</version>
+    <version>9.2.0</version>
 </dependency>
 
 <!-- Spring Boot Starter Web -->

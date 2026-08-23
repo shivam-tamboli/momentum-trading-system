@@ -10,4 +10,6 @@ import java.util.List;
 public interface RecommendationRepository extends JpaRepository<Recommendation, Long> {
 
     List<Recommendation> findByActionAndWeekDate(ActionType action, LocalDate weekDate);
+
+    List<Recommendation> findByIndexNameAndWeekDate(String indexName, LocalDate weekDate);
 }

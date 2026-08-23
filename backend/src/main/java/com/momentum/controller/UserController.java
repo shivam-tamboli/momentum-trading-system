@@ -1,6 +1,7 @@
 package com.momentum.controller;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.momentum.model.User;
 import com.momentum.repository.UserRepository;
 import com.momentum.util.EncryptionUtil;
@@ -74,6 +75,11 @@ public class UserController {
             return ResponseEntity.ok(new MeResponse(existingUser.getId(), existingUser.getEmail()));
         }
 
+        if (request.alpacaApiKey() == null || request.alpacaApiSecret() == null) {
+            return ResponseEntity.badRequest()
+                    .body(new ErrorResponse("alpacaApiKey and alpacaApiSecret are required"));
+        }
+
         String encryptedKey = encryptionUtil.encrypt(request.alpacaApiKey());
         String encryptedSecret = encryptionUtil.encrypt(request.alpacaApiSecret());
 
@@ -128,7 +134,9 @@ public class UserController {
     private record SupabaseUserResponse(String id, String email) {
     }
 
-    public record RegisterRequest(String alpacaApiKey, String alpacaApiSecret) {
+    public record RegisterRequest(
+            @JsonProperty("alpacaApiKey") String alpacaApiKey,
+            @JsonProperty("alpacaApiSecret") String alpacaApiSecret) {
     }
 
     public record MeResponse(Long id, String email) {

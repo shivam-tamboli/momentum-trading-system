@@ -28,6 +28,9 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Value("${supabase.url}")
     private String supabaseUrl;
 
+    @Value("${supabase.anon-key}")
+    private String supabaseAnonKey;
+
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
@@ -60,6 +63,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         try {
             HttpHeaders headers = new HttpHeaders();
             headers.set("Authorization", BEARER_PREFIX + token);
+            headers.set("apikey", supabaseAnonKey);
             HttpEntity<Void> entity = new HttpEntity<>(headers);
 
             ResponseEntity<String> supabaseResponse = restTemplate.exchange(

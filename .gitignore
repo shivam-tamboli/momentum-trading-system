@@ -1,5 +1,6 @@
 # Backend (Maven / Java)
 backend/target/
+backend/.env
 
 # Frontend (Next.js)
 frontend/node_modules/

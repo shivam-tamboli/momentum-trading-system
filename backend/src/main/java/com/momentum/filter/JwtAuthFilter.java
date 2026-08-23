@@ -35,6 +35,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     private final RestTemplate restTemplate = new RestTemplate();
 
     @Override
+    protected boolean shouldNotFilter(HttpServletRequest request) {
+        return request.getRequestURI().startsWith("/admin/");
+    }
+
+    @Override
     protected void doFilterInternal(HttpServletRequest request,
                                      HttpServletResponse response,
                                      FilterChain filterChain) throws ServletException, IOException {

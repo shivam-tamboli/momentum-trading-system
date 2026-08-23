@@ -11,6 +11,10 @@ api.interceptors.request.use(async (config) => {
     data: { session },
   } = await supabase.auth.getSession();
 
+  console.log(
+    `[api] ${config.method?.toUpperCase()} ${config.url} — session present: ${!!session}, token present: ${!!session?.access_token}`
+  );
+
   if (session?.access_token) {
     config.headers.Authorization = `Bearer ${session.access_token}`;
   }

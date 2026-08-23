@@ -1,13 +1,31 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode, useEffect, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { AppSidebarContent } from '@/components/AppSidebar';
+import { useUser } from '@/lib/user-context';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
+  const router = useRouter();
+  const { userId, isLoading } = useUser();
+
+  useEffect(() => {
+    if (!isLoading && userId === null) {
+      router.replace('/register');
+    }
+  }, [isLoading, userId, router]);
+
+  if (isLoading || userId === null) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <p className="text-sm text-muted-foreground">Loading account…</p>
+      </div>
+    );
+  }
 
   return (
     <div className="flex min-h-screen bg-background">

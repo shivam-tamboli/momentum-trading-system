@@ -9,6 +9,7 @@ import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.context.SecurityContextHolder;
@@ -41,14 +42,14 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         String authHeader = request.getHeader("Authorization");
 
         if (authHeader == null || !authHeader.startsWith(BEARER_PREFIX)) {
-            response.sendError(HttpStatus.UNAUTHORIZED.value(), "Missing or invalid Authorization header");
+            writeUnauthorized(response, "Missing or invalid Authorization header");
             return;
         }
 
         String token = authHeader.substring(BEARER_PREFIX.length());
 
         if (!isTokenValid(token)) {
-            response.sendError(HttpStatus.UNAUTHORIZED.value(), "Invalid or expired token");
+            writeUnauthorized(response, "Invalid or expired token");
             return;
         }
 
@@ -57,6 +58,12 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         SecurityContextHolder.getContext().setAuthentication(authentication);
 
         filterChain.doFilter(request, response);
+    }
+
+    private void writeUnauthorized(HttpServletResponse response, String message) throws IOException {
+        response.setStatus(HttpStatus.UNAUTHORIZED.value());
+        response.setContentType(MediaType.APPLICATION_JSON_VALUE);
+        response.getWriter().write("{\"error\":\"" + message + "\"}");
     }
 
     private boolean isTokenValid(String token) {
@@ -78,5 +85,5 @@ public class JwtAuthFilter extends OncePerRequestFilter {
             return false;
         }
     }
-    
+
 }

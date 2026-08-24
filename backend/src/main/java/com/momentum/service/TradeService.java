@@ -68,7 +68,21 @@ public class TradeService {
                     "Decryption returned null — ENCRYPTION_KEY mismatch or corrupted data");
         }
 
-        AlpacaAPI userAlpacaAPI = alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
+        log.info("Creating user AlpacaAPI, apiKey starts with: {}",
+                apiKey == null ? "null" : apiKey.substring(0, Math.min(5, apiKey.length())));
+
+        log.info("apiKey starts with: {}",
+                apiKey == null ? "NULL" : apiKey.substring(0, Math.min(5, apiKey.length())));
+        log.info("apiSecret is null: {}", apiSecret == null);
+        log.info("apiSecret length: {}", apiSecret == null ? 0 : apiSecret.length());
+
+        AlpacaAPI userAlpacaAPI;
+        try {
+            userAlpacaAPI = alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
+        } catch (Exception e) {
+            log.error("Failed to create AlpacaAPI", e);
+            throw e;
+        }
 
         BigDecimal buyingPower;
         try {
@@ -105,8 +119,29 @@ public class TradeService {
                         OrderType.MARKET, OrderTimeInForce.DAY,
                         null, null, null, null, null, null, null, null, null, null);
 
-                BigDecimal filledPrice = new BigDecimal(order.getAverageFillPrice());
-                BigDecimal filledQty = new BigDecimal(order.getFilledQuantity());
+                // Alpaca fills orders asynchronously; the immediate POST /orders response often
+                // doesn't include fill data yet. Wait briefly, then re-fetch the order to pick it up.
+                Thread.sleep(1500);
+                try {
+                    Order filledOrder = userAlpacaAPI.orders().get(order.getId(), false);
+                    if (filledOrder != null && filledOrder.getAverageFillPrice() != null) {
+                        order = filledOrder;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to re-fetch order {} for {} (user {}): {}",
+                            order.getId(), stock.getSymbol(), userId, e.getMessage());
+                }
+
+                String fillPriceStr = order.getAverageFillPrice();
+                String fillQtyStr = order.getFilledQuantity();
+
+                BigDecimal filledPrice = (fillPriceStr != null && !fillPriceStr.isEmpty())
+                        ? new BigDecimal(fillPriceStr)
+                        : BigDecimal.ZERO;
+
+                BigDecimal filledQty = (fillQtyStr != null && !fillQtyStr.isEmpty())
+                        ? new BigDecimal(fillQtyStr)
+                        : BigDecimal.ZERO;
 
                 Trade trade = new Trade(
                         null,
@@ -124,7 +159,7 @@ public class TradeService {
 
                 results.add(new TradeResult(stock.getSymbol(), amountPerStock, filledQty, filledPrice));
             } catch (Exception e) {
-                log.warn("Buy order failed for {} (user {}): {}", stock.getSymbol(), userId, e.getMessage());
+                log.warn("Buy order failed for {} (user {}): {}", stock.getSymbol(), userId, e.getMessage(), e);
             }
         }
 
@@ -143,6 +178,8 @@ public class TradeService {
                     "Decryption returned null — ENCRYPTION_KEY mismatch or corrupted data");
         }
 
+        log.info("Creating user AlpacaAPI, apiKey starts with: {}",
+                apiKey == null ? "null" : apiKey.substring(0, Math.min(5, apiKey.length())));
         AlpacaAPI userAlpacaAPI = alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
 
         LocalDate weekDate = getCurrentWeekMonday();
@@ -183,8 +220,30 @@ public class TradeService {
                         OrderType.MARKET, OrderTimeInForce.DAY,
                         null, null, null, null, null, null, null, null, null, null);
 
-                BigDecimal filledPrice = new BigDecimal(order.getAverageFillPrice());
-                BigDecimal filledQty = new BigDecimal(order.getFilledQuantity());
+                // Alpaca fills orders asynchronously; the immediate POST /orders response often
+                // doesn't include fill data yet. Wait briefly, then re-fetch the order to pick it up.
+                Thread.sleep(1500);
+                try {
+                    Order filledOrder = userAlpacaAPI.orders().get(order.getId(), false);
+                    if (filledOrder != null && filledOrder.getAverageFillPrice() != null) {
+                        order = filledOrder;
+                    }
+                } catch (Exception e) {
+                    log.warn("Failed to re-fetch order {} for {} (user {}): {}",
+                            order.getId(), stock.getSymbol(), userId, e.getMessage());
+                }
+
+                String fillPriceStr = order.getAverageFillPrice();
+                String fillQtyStr = order.getFilledQuantity();
+
+                BigDecimal filledPrice = (fillPriceStr != null && !fillPriceStr.isEmpty())
+                        ? new BigDecimal(fillPriceStr)
+                        : BigDecimal.ZERO;
+
+                BigDecimal filledQty = (fillQtyStr != null && !fillQtyStr.isEmpty())
+                        ? new BigDecimal(fillQtyStr)
+                        : BigDecimal.ZERO;
+
                 BigDecimal amountReceived = filledPrice.multiply(filledQty);
 
                 Trade trade = new Trade(

@@ -56,11 +56,29 @@ public class MomentumAlgorithmService {
         List<ScoredStock> scoredStocks = new ArrayList<>();
 
         for (Stock stock : stocks) {
-            try {
-                BigDecimal momentumScore = calculateMomentumScore(stock);
+            // One retry with a short backoff so a single transient DB/connection hiccup on one
+            // stock doesn't cascade into skipping every stock that follows it in the list.
+            BigDecimal momentumScore = null;
+            Exception lastError = null;
+            for (int attempt = 1; attempt <= 2 && momentumScore == null; attempt++) {
+                try {
+                    momentumScore = calculateMomentumScore(stock);
+                } catch (Exception e) {
+                    lastError = e;
+                    if (attempt < 2) {
+                        try {
+                            Thread.sleep(500);
+                        } catch (InterruptedException ie) {
+                            Thread.currentThread().interrupt();
+                        }
+                    }
+                }
+            }
+
+            if (momentumScore != null) {
                 scoredStocks.add(new ScoredStock(stock, momentumScore));
-            } catch (Exception e) {
-                log.warn("Skipping stock {} due to error: {}", stock.getSymbol(), e.getMessage());
+            } else {
+                log.warn("Skipping stock {} due to error: {}", stock.getSymbol(), lastError.getMessage());
             }
         }
 

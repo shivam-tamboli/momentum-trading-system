@@ -46,7 +46,7 @@ public class RecommendationController {
     private List<RecommendationResponse> getRecommendationsForIndex(String indexName) {
         LocalDate weekDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
 
-        return recommendationRepository.findByIndexNameAndWeekDate(indexName, weekDate).stream()
+        return recommendationRepository.findLatestByIndexNameAndWeekDate(indexName, weekDate).stream()
                 .map(recommendation -> new RecommendationResponse(
                         recommendation.getStock().getSymbol(),
                         recommendation.getStock().getName(),

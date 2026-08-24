@@ -15,6 +15,8 @@ import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.account.Account;
 import net.jacobpeterson.alpaca.model.endpoint.orders.Order;
 import net.jacobpeterson.alpaca.model.endpoint.orders.enums.OrderSide;
+import net.jacobpeterson.alpaca.model.endpoint.orders.enums.OrderTimeInForce;
+import net.jacobpeterson.alpaca.model.endpoint.orders.enums.OrderType;
 import net.jacobpeterson.alpaca.model.endpoint.positions.Position;
 import net.jacobpeterson.alpaca.rest.AlpacaClientException;
 import org.slf4j.Logger;
@@ -90,8 +92,12 @@ public class TradeService {
         for (Recommendation recommendation : buyRecommendations) {
             Stock stock = recommendation.getStock();
             try {
-                Order order = userAlpacaAPI.orders().requestNotionalMarketOrder(
-                        stock.getSymbol(), amountPerStock.doubleValue(), OrderSide.BUY);
+                // requestNotionalMarketOrder() hardcodes OrderTimeInForce.GOOD_UNTIL_CANCELLED, but Alpaca
+                // rejects fractional/notional orders with GTC (error 42210000) — they must be DAY orders.
+                Order order = userAlpacaAPI.orders().requestOrder(
+                        stock.getSymbol(), null, amountPerStock.doubleValue(), OrderSide.BUY,
+                        OrderType.MARKET, OrderTimeInForce.DAY,
+                        null, null, null, null, null, null, null, null, null, null);
 
                 BigDecimal filledPrice = new BigDecimal(order.getAverageFillPrice());
                 BigDecimal filledQty = new BigDecimal(order.getFilledQuantity());
@@ -158,8 +164,12 @@ public class TradeService {
             try {
                 BigDecimal quantity = new BigDecimal(position.getQuantity());
 
-                Order order = userAlpacaAPI.orders().requestFractionalMarketOrder(
-                        stock.getSymbol(), quantity.doubleValue(), OrderSide.SELL);
+                // requestFractionalMarketOrder() hardcodes OrderTimeInForce.GOOD_UNTIL_CANCELLED, but Alpaca
+                // rejects fractional/notional orders with GTC (error 42210000) — they must be DAY orders.
+                Order order = userAlpacaAPI.orders().requestOrder(
+                        stock.getSymbol(), quantity.doubleValue(), null, OrderSide.SELL,
+                        OrderType.MARKET, OrderTimeInForce.DAY,
+                        null, null, null, null, null, null, null, null, null, null);
 
                 BigDecimal filledPrice = new BigDecimal(order.getAverageFillPrice());
                 BigDecimal filledQty = new BigDecimal(order.getFilledQuantity());

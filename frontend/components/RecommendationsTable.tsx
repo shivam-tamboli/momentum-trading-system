@@ -56,7 +56,7 @@ export function RecommendationsTable({ recommendations, isLoading }: Recommendat
 
         {!isLoading &&
           recommendations?.map((rec) => (
-            <TableRow key={rec.symbol}>
+            <TableRow key={`${rec.symbol}-${rec.week_date}`}>
               <TableCell className="font-medium">{rec.symbol}</TableCell>
               <TableCell className="text-muted-foreground">{rec.name}</TableCell>
               <TableCell>

@@ -35,7 +35,6 @@ public class MomentumAlgorithmService {
     private static final Logger log = LoggerFactory.getLogger(MomentumAlgorithmService.class);
 
     private static final MathContext MATH_CONTEXT = new MathContext(10);
-    private static final int TOP_BOTTOM_COUNT = 10;
 
     private final AlpacaAPI alpacaAPI;
     private final StockRepository stockRepository;
@@ -77,13 +76,16 @@ public class MomentumAlgorithmService {
             indexStocks.sort((a, b) -> b.score().compareTo(a.score()));
 
             int total = indexStocks.size();
+            int buyCount = Math.max(1, (int) Math.ceil(total * 0.2));
+            int sellCount = Math.max(1, (int) Math.ceil(total * 0.2));
+
             for (int rank = 0; rank < total; rank++) {
                 ScoredStock scored = indexStocks.get(rank);
 
                 ActionType action;
-                if (rank < TOP_BOTTOM_COUNT) {
+                if (rank < buyCount) {
                     action = ActionType.BUY;
-                } else if (rank >= total - TOP_BOTTOM_COUNT) {
+                } else if (rank >= total - sellCount) {
                     action = ActionType.SELL;
                 } else {
                     action = ActionType.HOLD;

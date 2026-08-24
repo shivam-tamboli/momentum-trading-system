@@ -62,6 +62,12 @@ public class TradeService {
 
         String apiKey = encryptionUtil.decrypt(user.getAlpacaApiKeyEncrypted());
         String apiSecret = encryptionUtil.decrypt(user.getAlpacaApiSecretEncrypted());
+
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new IllegalStateException(
+                    "Decryption returned null — ENCRYPTION_KEY mismatch or corrupted data");
+        }
+
         AlpacaAPI userAlpacaAPI = alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
 
         BigDecimal buyingPower;
@@ -131,6 +137,12 @@ public class TradeService {
 
         String apiKey = encryptionUtil.decrypt(user.getAlpacaApiKeyEncrypted());
         String apiSecret = encryptionUtil.decrypt(user.getAlpacaApiSecretEncrypted());
+
+        if (apiKey == null || apiKey.isEmpty()) {
+            throw new IllegalStateException(
+                    "Decryption returned null — ENCRYPTION_KEY mismatch or corrupted data");
+        }
+
         AlpacaAPI userAlpacaAPI = alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
 
         LocalDate weekDate = getCurrentWeekMonday();

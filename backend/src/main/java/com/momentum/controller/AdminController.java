@@ -18,7 +18,11 @@ public class AdminController {
 
     @PostMapping("/run-algorithm")
     public ResponseEntity<String> runAlgorithm() {
-        momentumAlgorithmService.generateWeeklyRecommendations();
-        return ResponseEntity.ok("Algorithm completed successfully");
+        try {
+            momentumAlgorithmService.generateWeeklyRecommendations();
+            return ResponseEntity.ok("Algorithm completed successfully. Recommendations generated for all 4 indexes.");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Algorithm failed: " + e.getMessage());
+        }
     }
 }

@@ -2,10 +2,8 @@ package com.momentum.service;
 
 import com.momentum.model.Recommendation;
 import com.momentum.model.Stock;
-import com.momentum.model.StockPrice;
 import com.momentum.model.enums.ActionType;
 import com.momentum.repository.RecommendationRepository;
-import com.momentum.repository.StockPriceRepository;
 import com.momentum.repository.StockRepository;
 import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.marketdata.common.historical.bar.enums.BarTimePeriod;
@@ -35,40 +33,41 @@ public class MomentumAlgorithmService {
     private static final Logger log = LoggerFactory.getLogger(MomentumAlgorithmService.class);
 
     private static final MathContext MATH_CONTEXT = new MathContext(10);
-    private static final int TOP_BOTTOM_COUNT = 10;
 
     private final AlpacaAPI alpacaAPI;
     private final StockRepository stockRepository;
-    private final StockPriceRepository stockPriceRepository;
     private final RecommendationRepository recommendationRepository;
 
     public MomentumAlgorithmService(AlpacaAPI alpacaAPI,
                                      StockRepository stockRepository,
-                                     StockPriceRepository stockPriceRepository,
                                      RecommendationRepository recommendationRepository) {
         this.alpacaAPI = alpacaAPI;
         this.stockRepository = stockRepository;
-        this.stockPriceRepository = stockPriceRepository;
         this.recommendationRepository = recommendationRepository;
     }
 
     public void generateWeeklyRecommendations() {
         List<Stock> stocks = stockRepository.findAll();
-        List<ScoredStock> scoredStocks = new ArrayList<>();
 
-        for (Stock stock : stocks) {
-            try {
-                BigDecimal momentumScore = calculateMomentumScore(stock);
-                scoredStocks.add(new ScoredStock(stock, momentumScore));
-            } catch (Exception e) {
-                log.warn("Skipping stock {} due to error: {}", stock.getSymbol(), e.getMessage());
-            }
-        }
+        List<ScoredStock> scoredStocks = stocks.parallelStream()
+                .map(stock -> {
+                    try {
+                        BigDecimal score = calculateMomentumScore(stock);
+                        return new ScoredStock(stock, score);
+                    } catch (Exception e) {
+                        log.warn("Skipping stock {}: {}", stock.getSymbol(), e.getMessage());
+                        return null;
+                    }
+                })
+                .filter(scored -> scored != null)
+                .collect(Collectors.toList());
 
         Map<String, List<ScoredStock>> scoredStocksByIndex = scoredStocks.stream()
                 .collect(Collectors.groupingBy(scored -> scored.stock().getIndexName()));
 
         LocalDate weekDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+
+        List<Recommendation> allRecommendations = new ArrayList<>();
 
         for (Map.Entry<String, List<ScoredStock>> entry : scoredStocksByIndex.entrySet()) {
             String indexName = entry.getKey();
@@ -77,19 +76,22 @@ public class MomentumAlgorithmService {
             indexStocks.sort((a, b) -> b.score().compareTo(a.score()));
 
             int total = indexStocks.size();
+            int buyCount = Math.max(1, (int) Math.ceil(total * 0.2));
+            int sellCount = Math.max(1, (int) Math.ceil(total * 0.2));
+
             for (int rank = 0; rank < total; rank++) {
                 ScoredStock scored = indexStocks.get(rank);
 
                 ActionType action;
-                if (rank < TOP_BOTTOM_COUNT) {
+                if (rank < buyCount) {
                     action = ActionType.BUY;
-                } else if (rank >= total - TOP_BOTTOM_COUNT) {
+                } else if (rank >= total - sellCount) {
                     action = ActionType.SELL;
                 } else {
                     action = ActionType.HOLD;
                 }
 
-                Recommendation recommendation = new Recommendation(
+                allRecommendations.add(new Recommendation(
                         null,
                         scored.stock(),
                         scored.score(),
@@ -97,16 +99,21 @@ public class MomentumAlgorithmService {
                         indexName,
                         weekDate,
                         null
-                );
-                recommendationRepository.save(recommendation);
+                ));
             }
         }
+
+        recommendationRepository.saveAll(allRecommendations);
     }
 
     private BigDecimal calculateMomentumScore(Stock stock) throws Exception {
+        long stockStartTime = System.currentTimeMillis();
+        log.info("Processing stock {} - start", stock.getSymbol());
+
         ZonedDateTime end = ZonedDateTime.now();
         ZonedDateTime start = end.minusMonths(6);
 
+        long alpacaStartTime = System.currentTimeMillis();
         StockBarsResponse response = alpacaAPI.stockMarketData().getBars(
                 stock.getSymbol(),
                 start,
@@ -118,21 +125,12 @@ public class MomentumAlgorithmService {
                 BarAdjustment.RAW,
                 BarFeed.IEX
         );
+        long alpacaElapsed = System.currentTimeMillis() - alpacaStartTime;
+        log.info("Alpaca fetch for {} took {}ms", stock.getSymbol(), alpacaElapsed);
 
         List<StockBar> bars = response.getBars();
         if (bars == null || bars.size() < 2) {
             throw new IllegalStateException("Not enough price history for " + stock.getSymbol());
-        }
-
-        for (StockBar bar : bars) {
-            StockPrice stockPrice = new StockPrice(
-                    null,
-                    stock,
-                    BigDecimal.valueOf(bar.getClose()),
-                    bar.getTimestamp().toLocalDate(),
-                    null
-            );
-            stockPriceRepository.save(stockPrice);
         }
 
         BigDecimal latestPrice = BigDecimal.valueOf(bars.get(bars.size() - 1).getClose());
@@ -145,11 +143,16 @@ public class MomentumAlgorithmService {
         BigDecimal ret1m = calculateReturn(latestPrice, price1mAgo);
         BigDecimal vol3m = calculateVolatility3m(bars);
 
-        return ret6m.multiply(new BigDecimal("0.5"))
+        BigDecimal momentumScore = ret6m.multiply(new BigDecimal("0.5"))
                 .add(ret3m.multiply(new BigDecimal("0.3")))
                 .add(ret1m.multiply(new BigDecimal("0.2")))
                 .subtract(vol3m.multiply(new BigDecimal("0.1")))
                 .setScale(6, RoundingMode.HALF_UP);
+
+        long totalElapsed = System.currentTimeMillis() - stockStartTime;
+        log.info("Stock {} total time: {}ms", stock.getSymbol(), totalElapsed);
+
+        return momentumScore;
     }
 
     private BigDecimal calculateReturn(BigDecimal latestPrice, BigDecimal pastPrice) {

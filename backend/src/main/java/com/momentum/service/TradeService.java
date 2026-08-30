@@ -120,16 +120,10 @@ public class TradeService {
                         null, null, null, null, null, null, null, null, null, null);
 
                 // Alpaca fills orders asynchronously; the immediate POST /orders response often
-                // doesn't include fill data yet. Wait briefly, then re-fetch the order to pick it up.
-                Thread.sleep(1500);
-                try {
-                    Order filledOrder = userAlpacaAPI.orders().get(order.getId(), false);
-                    if (filledOrder != null && filledOrder.getAverageFillPrice() != null) {
-                        order = filledOrder;
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to re-fetch order {} for {} (user {}): {}",
-                            order.getId(), stock.getSymbol(), userId, e.getMessage());
+                // doesn't include fill data yet. Poll for the fill, then re-fetch the order to pick it up.
+                Order filledOrder = waitForFill(userAlpacaAPI, order.getId());
+                if (filledOrder != null) {
+                    order = filledOrder;
                 }
 
                 String fillPriceStr = order.getAverageFillPrice();
@@ -188,7 +182,8 @@ public class TradeService {
 
         Map<String, Recommendation> sellRecommendationsBySymbol = sellRecommendations.stream()
                 .collect(Collectors.toMap(recommendation -> recommendation.getStock().getSymbol(),
-                        recommendation -> recommendation));
+                        recommendation -> recommendation,
+                        (existing, replacement) -> replacement));
 
         List<Position> positions;
         try {
@@ -221,16 +216,10 @@ public class TradeService {
                         null, null, null, null, null, null, null, null, null, null);
 
                 // Alpaca fills orders asynchronously; the immediate POST /orders response often
-                // doesn't include fill data yet. Wait briefly, then re-fetch the order to pick it up.
-                Thread.sleep(1500);
-                try {
-                    Order filledOrder = userAlpacaAPI.orders().get(order.getId(), false);
-                    if (filledOrder != null && filledOrder.getAverageFillPrice() != null) {
-                        order = filledOrder;
-                    }
-                } catch (Exception e) {
-                    log.warn("Failed to re-fetch order {} for {} (user {}): {}",
-                            order.getId(), stock.getSymbol(), userId, e.getMessage());
+                // doesn't include fill data yet. Poll for the fill, then re-fetch the order to pick it up.
+                Order filledOrder = waitForFill(userAlpacaAPI, order.getId());
+                if (filledOrder != null) {
+                    order = filledOrder;
                 }
 
                 String fillPriceStr = order.getAverageFillPrice();
@@ -267,6 +256,22 @@ public class TradeService {
         }
 
         return new SellResponse(results, null);
+    }
+
+    private Order waitForFill(AlpacaAPI alpacaAPI, String orderId) {
+        for (int i = 0; i < 5; i++) {
+            try {
+                Thread.sleep(2000);
+                Order order = alpacaAPI.orders().get(orderId, false);
+                if (order != null && order.getAverageFillPrice() != null
+                        && !order.getAverageFillPrice().isEmpty()) {
+                    return order;
+                }
+            } catch (Exception e) {
+                log.warn("Retry {} waiting for fill on order {}", i + 1, orderId);
+            }
+        }
+        return null;
     }
 
     private LocalDate getCurrentWeekMonday() {

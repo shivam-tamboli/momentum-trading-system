@@ -157,6 +157,10 @@ public class TradeService {
             }
         }
 
+        log.info("Buy complete: {} orders placed, {} filled with price data",
+                results.size(),
+                results.stream().filter(r -> r.price().compareTo(BigDecimal.ZERO) > 0).count());
+
         return new BuyResponse(results);
     }
 
@@ -259,9 +263,10 @@ public class TradeService {
     }
 
     private Order waitForFill(AlpacaAPI alpacaAPI, String orderId) {
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 8; i++) {
+            log.info("Waiting for fill on order {} - attempt {}/8", orderId, i + 1);
             try {
-                Thread.sleep(2000);
+                Thread.sleep(3000);
                 Order order = alpacaAPI.orders().get(orderId, false);
                 if (order != null && order.getAverageFillPrice() != null
                         && !order.getAverageFillPrice().isEmpty()) {

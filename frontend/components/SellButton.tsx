@@ -20,14 +20,23 @@ export function SellButton({ userId }: SellButtonProps) {
       return data;
     },
     onSuccess: (data) => {
-      if (data.trades.length === 0) {
+      const failures = data.failures ?? [];
+
+      if (data.trades.length === 0 && failures.length === 0) {
         toast.info(data.message ?? 'No positions match this week’s sell recommendations.');
         return;
       }
-      toast.success(`Placed ${data.trades.length} sell order(s).`);
-      queryClient.invalidateQueries({ queryKey: ['account', userId] });
-      queryClient.invalidateQueries({ queryKey: ['positions', userId] });
-      queryClient.invalidateQueries({ queryKey: ['trades', userId] });
+
+      if (data.trades.length > 0) {
+        toast.success(`Placed ${data.trades.length} sell order(s).`);
+        queryClient.invalidateQueries({ queryKey: ['account', userId] });
+        queryClient.invalidateQueries({ queryKey: ['positions', userId] });
+        queryClient.invalidateQueries({ queryKey: ['trades', userId] });
+      }
+
+      failures.forEach((failure) => {
+        toast.warning(`Sell order failed for ${failure.symbol}: ${failure.reason}`);
+      });
     },
     onError: (error) => {
       const message = isAxiosError<ErrorResponse>(error)

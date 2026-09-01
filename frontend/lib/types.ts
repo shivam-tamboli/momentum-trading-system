@@ -54,9 +54,15 @@ export interface SellTradeResult {
   amount_received: number;
 }
 
+export interface SellFailureResult {
+  symbol: string;
+  reason: string;
+}
+
 export interface SellResponse {
   trades: SellTradeResult[];
   message?: string;
+  failures?: SellFailureResult[];
 }
 
 export interface MeResponse {

@@ -64,7 +64,7 @@ public class TradeController {
 
         TradeService.SellResponse response = tradeService.sell(userId);
 
-        if (response.trades().isEmpty() && response.message() != null) {
+        if (response.trades().isEmpty() && response.failures().isEmpty() && response.message() != null) {
             return ResponseEntity.ok(new MessageResponse(response.message()));
         }
 
@@ -72,7 +72,11 @@ public class TradeController {
                 .map(t -> new SellTradeResult(t.symbol(), t.sharesCount(), t.amount()))
                 .collect(Collectors.toList());
 
-        return ResponseEntity.ok(new SellApiResponse(trades));
+        List<SellFailureResult> failures = response.failures().stream()
+                .map(f -> new SellFailureResult(f.symbol(), f.reason()))
+                .collect(Collectors.toList());
+
+        return ResponseEntity.ok(new SellApiResponse(trades, failures));
     }
 
     @GetMapping("/{userId}/trades")
@@ -109,7 +113,10 @@ public class TradeController {
     public record SellTradeResult(String symbol, BigDecimal sharesSold, BigDecimal amountReceived) {
     }
 
-    public record SellApiResponse(List<SellTradeResult> trades) {
+    public record SellFailureResult(String symbol, String reason) {
+    }
+
+    public record SellApiResponse(List<SellTradeResult> trades, List<SellFailureResult> failures) {
     }
 
     public record MessageResponse(String message) {

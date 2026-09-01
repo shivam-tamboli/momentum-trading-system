@@ -220,10 +220,11 @@ public class TradeService {
                 .collect(Collectors.toList());
 
         if (matchedPositions.isEmpty()) {
-            return new SellResponse(List.of(), "No positions match this week's sell recommendations");
+            return new SellResponse(List.of(), "No positions match this week's sell recommendations", List.of());
         }
 
         List<TradeResult> results = new ArrayList<>();
+        List<SellFailure> failures = new ArrayList<>();
 
         for (Position position : matchedPositions) {
             Recommendation recommendation = sellRecommendationsBySymbol.get(position.getSymbol());
@@ -274,11 +275,13 @@ public class TradeService {
 
                 results.add(new TradeResult(stock.getSymbol(), amountReceived, filledQty, filledPrice));
             } catch (Exception e) {
-                log.warn("Sell order failed for {} (user {}): {}", stock.getSymbol(), userId, e.getMessage());
+                String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                log.warn("Sell order failed for {} (user {}): {}", stock.getSymbol(), userId, reason);
+                failures.add(new SellFailure(stock.getSymbol(), reason));
             }
         }
 
-        return new SellResponse(results, null);
+        return new SellResponse(results, null, failures);
     }
 
     private Order waitForFill(AlpacaAPI alpacaAPI, String orderId) {
@@ -308,6 +311,9 @@ public class TradeService {
     public record BuyResponse(List<TradeResult> trades) {
     }
 
-    public record SellResponse(List<TradeResult> trades, String message) {
+    public record SellFailure(String symbol, String reason) {
+    }
+
+    public record SellResponse(List<TradeResult> trades, String message, List<SellFailure> failures) {
     }
 }

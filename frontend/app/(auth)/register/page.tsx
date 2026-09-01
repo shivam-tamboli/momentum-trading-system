@@ -3,6 +3,7 @@
 import { FormEvent, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { isAxiosError } from 'axios';
+import { Eye, EyeOff } from 'lucide-react';
 import { api } from '@/lib/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +21,7 @@ export default function RegisterPage() {
   const router = useRouter();
   const [alpacaApiKey, setAlpacaApiKey] = useState('');
   const [alpacaApiSecret, setAlpacaApiSecret] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -70,14 +72,23 @@ export default function RegisterPage() {
             </div>
             <div className="space-y-2">
               <Label htmlFor="alpacaApiSecret">Alpaca API Secret</Label>
-              <Input
-                id="alpacaApiSecret"
-                type="password"
-                autoComplete="off"
-                required
-                value={alpacaApiSecret}
-                onChange={(event) => setAlpacaApiSecret(event.target.value)}
-              />
+              <div className="relative">
+                <Input
+                  id="alpacaApiSecret"
+                  type={showPassword ? 'text' : 'password'}
+                  autoComplete="off"
+                  required
+                  value={alpacaApiSecret}
+                  onChange={(event) => setAlpacaApiSecret(event.target.value)}
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPassword(!showPassword)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPassword ? <EyeOff size={16} /> : <Eye size={16} />}
+                </button>
+              </div>
             </div>
             {error && <p className="text-sm text-destructive">{error}</p>}
             <Button type="submit" className="w-full" disabled={isSubmitting}>

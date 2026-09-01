@@ -2,6 +2,7 @@ package com.momentum.service;
 
 import com.momentum.config.AlpacaConfig;
 import com.momentum.exception.InsufficientBalanceException;
+import com.momentum.exception.InvalidTradeAmountException;
 import com.momentum.model.Recommendation;
 import com.momentum.model.Stock;
 import com.momentum.model.Trade;
@@ -97,15 +98,33 @@ public class TradeService {
         }
 
         LocalDate weekDate = getCurrentWeekMonday();
-        List<Recommendation> buyRecommendations =
-                recommendationRepository.findByActionAndWeekDate(ActionType.BUY, weekDate);
+
+        // Defensive dedup: keyed by (symbol + indexName) so a stock that's legitimately a BUY
+        // under two different indexes (e.g. MSFT in both S&P 500 and Nasdaq 100) still counts as
+        // two distinct recommendations, while duplicate rows from re-running the algorithm for the
+        // same week (same symbol + same index) collapse to one instead of inflating the divisor.
+        List<Recommendation> buyRecommendations = new ArrayList<>(
+                recommendationRepository.findByActionAndWeekDate(ActionType.BUY, weekDate).stream()
+                        .collect(Collectors.toMap(
+                                recommendation -> recommendation.getStock().getSymbol() + "|" + recommendation.getIndexName(),
+                                recommendation -> recommendation,
+                                (existing, replacement) -> replacement))
+                        .values());
 
         if (buyRecommendations.isEmpty()) {
             return new BuyResponse(List.of());
         }
 
+        int recommendationCount = buyRecommendations.size();
         BigDecimal amountPerStock = amount.divide(
-                BigDecimal.valueOf(buyRecommendations.size()), 2, RoundingMode.DOWN);
+                BigDecimal.valueOf(recommendationCount), 2, RoundingMode.DOWN);
+
+        if (amountPerStock.compareTo(BigDecimal.ONE) < 0) {
+            throw new InvalidTradeAmountException(
+                    "Amount too small: $" + amount + " split across " + recommendationCount
+                            + " BUY recommendation(s) is $" + amountPerStock + " per stock, below Alpaca's "
+                            + "$1.00 minimum notional. Enter at least $" + recommendationCount + ".00.");
+        }
 
         List<TradeResult> results = new ArrayList<>();
 

@@ -91,15 +91,25 @@ public class MomentumAlgorithmService {
                     action = ActionType.HOLD;
                 }
 
-                allRecommendations.add(new Recommendation(
-                        null,
-                        scored.stock(),
-                        scored.score(),
-                        action,
-                        indexName,
-                        weekDate,
-                        null
-                ));
+                // Upsert rather than always inserting: re-running the algorithm for a week that
+                // already has recommendations must not pile up duplicate rows — buy()/sell()
+                // divide by recommendation count, so duplicates silently shrink the per-stock
+                // trade amount on every re-run. Deleting old rows isn't an option either: Trade
+                // holds a foreign key to Recommendation, so a prior trade placed against this
+                // week's recommendation would block the delete. Updating the existing row in
+                // place (same id) avoids both problems. Any leftover duplicate rows from before
+                // this fix existed are harmless — buy()/sell() already dedupe when reading.
+                List<Recommendation> existingRows = recommendationRepository
+                        .findByStockAndIndexNameAndWeekDateOrderById(scored.stock(), indexName, weekDate);
+
+                Recommendation recommendation = existingRows.isEmpty()
+                        ? new Recommendation(null, scored.stock(), scored.score(), action, indexName, weekDate, null)
+                        : existingRows.get(0);
+
+                recommendation.setMomentumScore(scored.score());
+                recommendation.setAction(action);
+
+                allRecommendations.add(recommendation);
             }
         }
 

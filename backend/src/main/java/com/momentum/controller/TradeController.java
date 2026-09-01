@@ -1,6 +1,7 @@
 package com.momentum.controller;
 
 import com.momentum.exception.InsufficientBalanceException;
+import com.momentum.exception.InvalidTradeAmountException;
 import com.momentum.model.Trade;
 import com.momentum.model.User;
 import com.momentum.model.enums.ActionType;
@@ -49,6 +50,8 @@ public class TradeController {
 
             return ResponseEntity.ok(new BuyApiResponse(trades));
         } catch (InsufficientBalanceException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (InvalidTradeAmountException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }

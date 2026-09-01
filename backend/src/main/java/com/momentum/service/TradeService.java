@@ -3,6 +3,7 @@ package com.momentum.service;
 import com.momentum.config.AlpacaConfig;
 import com.momentum.exception.InsufficientBalanceException;
 import com.momentum.exception.InvalidTradeAmountException;
+import com.momentum.exception.MarketClosedException;
 import com.momentum.model.Recommendation;
 import com.momentum.model.Stock;
 import com.momentum.model.Trade;
@@ -14,6 +15,7 @@ import com.momentum.repository.UserRepository;
 import com.momentum.util.EncryptionUtil;
 import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.account.Account;
+import net.jacobpeterson.alpaca.model.endpoint.clock.Clock;
 import net.jacobpeterson.alpaca.model.endpoint.orders.Order;
 import net.jacobpeterson.alpaca.model.endpoint.orders.enums.OrderSide;
 import net.jacobpeterson.alpaca.model.endpoint.orders.enums.OrderTimeInForce;
@@ -84,6 +86,8 @@ public class TradeService {
             log.error("Failed to create AlpacaAPI", e);
             throw e;
         }
+
+        checkMarketOpen(userAlpacaAPI);
 
         BigDecimal buyingPower;
         try {
@@ -199,6 +203,8 @@ public class TradeService {
                 apiKey == null ? "null" : apiKey.substring(0, Math.min(5, apiKey.length())));
         AlpacaAPI userAlpacaAPI = alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
 
+        checkMarketOpen(userAlpacaAPI);
+
         LocalDate weekDate = getCurrentWeekMonday();
         List<Recommendation> sellRecommendations =
                 recommendationRepository.findByActionAndWeekDate(ActionType.SELL, weekDate);
@@ -282,6 +288,24 @@ public class TradeService {
         }
 
         return new SellResponse(results, null, failures);
+    }
+
+    // A DAY market order placed while the market is closed won't fill within waitForFill()'s
+    // 24-second window — it just queues until the next open, which can be hours away. Rather than
+    // let that silently produce a trade row with $0.00/0 quantity, reject the request up front with
+    // a clear reason.
+    private void checkMarketOpen(AlpacaAPI alpacaAPI) {
+        Clock clock;
+        try {
+            clock = alpacaAPI.clock().get();
+        } catch (AlpacaClientException e) {
+            throw new RuntimeException("Failed to fetch Alpaca market clock", e);
+        }
+
+        if (clock.getIsOpen() == null || !clock.getIsOpen()) {
+            throw new MarketClosedException(
+                    "Market is closed. It reopens at " + clock.getNextOpen() + ".");
+        }
     }
 
     private Order waitForFill(AlpacaAPI alpacaAPI, String orderId) {

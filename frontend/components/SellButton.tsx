@@ -39,10 +39,17 @@ export function SellButton({ userId }: SellButtonProps) {
       });
     },
     onError: (error) => {
-      const message = isAxiosError<ErrorResponse>(error)
-        ? error.response?.data?.error ?? 'Failed to place sell order.'
-        : 'Failed to place sell order.';
-      toast.error(message);
+      if (isAxiosError<ErrorResponse>(error)) {
+        if (error.response) {
+          toast.error(error.response.data?.error ?? 'Server returned an unexpected error.');
+        } else {
+          toast.error(
+            'Could not reach the server. It may be waking up from being idle — wait a few seconds and try again.'
+          );
+        }
+      } else {
+        toast.error('Failed to place sell order.');
+      }
     },
   });
 

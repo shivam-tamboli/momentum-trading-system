@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, LineChart, History, LogOut, TrendingUp } from 'lucide-react';
+import { LayoutDashboard, LineChart, History, LogOut, TrendingUp, Activity } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -13,6 +13,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/recommendations', label: 'Recommendations', icon: LineChart },
   { href: '/trades', label: 'Trade History', icon: History },
+  { href: '/admin', label: 'System Metrics', icon: Activity },
 ];
 
 export function AppSidebarContent() {

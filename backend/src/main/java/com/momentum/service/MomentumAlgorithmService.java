@@ -37,83 +37,98 @@ public class MomentumAlgorithmService {
     private final AlpacaAPI alpacaAPI;
     private final StockRepository stockRepository;
     private final RecommendationRepository recommendationRepository;
+    private final MetricsService metricsService;
 
     public MomentumAlgorithmService(AlpacaAPI alpacaAPI,
                                      StockRepository stockRepository,
-                                     RecommendationRepository recommendationRepository) {
+                                     RecommendationRepository recommendationRepository,
+                                     MetricsService metricsService) {
         this.alpacaAPI = alpacaAPI;
         this.stockRepository = stockRepository;
         this.recommendationRepository = recommendationRepository;
+        this.metricsService = metricsService;
     }
 
     public void generateWeeklyRecommendations() {
-        List<Stock> stocks = stockRepository.findAll();
+        long startTime = System.currentTimeMillis();
+        metricsService.recordRunStart();
 
-        List<ScoredStock> scoredStocks = stocks.parallelStream()
-                .map(stock -> {
-                    try {
-                        BigDecimal score = calculateMomentumScore(stock);
-                        return new ScoredStock(stock, score);
-                    } catch (Exception e) {
-                        log.warn("Skipping stock {}: {}", stock.getSymbol(), e.getMessage());
-                        return null;
+        try {
+            List<Stock> stocks = stockRepository.findAll();
+
+            List<ScoredStock> scoredStocks = stocks.parallelStream()
+                    .map(stock -> {
+                        try {
+                            BigDecimal score = calculateMomentumScore(stock);
+                            return new ScoredStock(stock, score);
+                        } catch (Exception e) {
+                            log.warn("Skipping stock {}: {}", stock.getSymbol(), e.getMessage());
+                            return null;
+                        }
+                    })
+                    .filter(scored -> scored != null)
+                    .collect(Collectors.toList());
+
+            Map<String, List<ScoredStock>> scoredStocksByIndex = scoredStocks.stream()
+                    .collect(Collectors.groupingBy(scored -> scored.stock().getIndexName()));
+
+            LocalDate weekDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+
+            List<Recommendation> allRecommendations = new ArrayList<>();
+
+            for (Map.Entry<String, List<ScoredStock>> entry : scoredStocksByIndex.entrySet()) {
+                String indexName = entry.getKey();
+                List<ScoredStock> indexStocks = entry.getValue();
+
+                indexStocks.sort((a, b) -> b.score().compareTo(a.score()));
+
+                int total = indexStocks.size();
+                int buyCount = Math.max(1, (int) Math.ceil(total * 0.2));
+                int sellCount = Math.max(1, (int) Math.ceil(total * 0.2));
+
+                for (int rank = 0; rank < total; rank++) {
+                    ScoredStock scored = indexStocks.get(rank);
+
+                    ActionType action;
+                    if (rank < buyCount) {
+                        action = ActionType.BUY;
+                    } else if (rank >= total - sellCount) {
+                        action = ActionType.SELL;
+                    } else {
+                        action = ActionType.HOLD;
                     }
-                })
-                .filter(scored -> scored != null)
-                .collect(Collectors.toList());
 
-        Map<String, List<ScoredStock>> scoredStocksByIndex = scoredStocks.stream()
-                .collect(Collectors.groupingBy(scored -> scored.stock().getIndexName()));
+                    // Upsert rather than always inserting: re-running the algorithm for a week that
+                    // already has recommendations must not pile up duplicate rows — buy()/sell()
+                    // divide by recommendation count, so duplicates silently shrink the per-stock
+                    // trade amount on every re-run. Deleting old rows isn't an option either: Trade
+                    // holds a foreign key to Recommendation, so a prior trade placed against this
+                    // week's recommendation would block the delete. Updating the existing row in
+                    // place (same id) avoids both problems. Any leftover duplicate rows from before
+                    // this fix existed are harmless — buy()/sell() already dedupe when reading.
+                    List<Recommendation> existingRows = recommendationRepository
+                            .findByStockAndIndexNameAndWeekDateOrderById(scored.stock(), indexName, weekDate);
 
-        LocalDate weekDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+                    Recommendation recommendation = existingRows.isEmpty()
+                            ? new Recommendation(null, scored.stock(), scored.score(), action, indexName, weekDate, null)
+                            : existingRows.get(0);
 
-        List<Recommendation> allRecommendations = new ArrayList<>();
+                    recommendation.setMomentumScore(scored.score());
+                    recommendation.setAction(action);
 
-        for (Map.Entry<String, List<ScoredStock>> entry : scoredStocksByIndex.entrySet()) {
-            String indexName = entry.getKey();
-            List<ScoredStock> indexStocks = entry.getValue();
-
-            indexStocks.sort((a, b) -> b.score().compareTo(a.score()));
-
-            int total = indexStocks.size();
-            int buyCount = Math.max(1, (int) Math.ceil(total * 0.2));
-            int sellCount = Math.max(1, (int) Math.ceil(total * 0.2));
-
-            for (int rank = 0; rank < total; rank++) {
-                ScoredStock scored = indexStocks.get(rank);
-
-                ActionType action;
-                if (rank < buyCount) {
-                    action = ActionType.BUY;
-                } else if (rank >= total - sellCount) {
-                    action = ActionType.SELL;
-                } else {
-                    action = ActionType.HOLD;
+                    allRecommendations.add(recommendation);
                 }
-
-                // Upsert rather than always inserting: re-running the algorithm for a week that
-                // already has recommendations must not pile up duplicate rows — buy()/sell()
-                // divide by recommendation count, so duplicates silently shrink the per-stock
-                // trade amount on every re-run. Deleting old rows isn't an option either: Trade
-                // holds a foreign key to Recommendation, so a prior trade placed against this
-                // week's recommendation would block the delete. Updating the existing row in
-                // place (same id) avoids both problems. Any leftover duplicate rows from before
-                // this fix existed are harmless — buy()/sell() already dedupe when reading.
-                List<Recommendation> existingRows = recommendationRepository
-                        .findByStockAndIndexNameAndWeekDateOrderById(scored.stock(), indexName, weekDate);
-
-                Recommendation recommendation = existingRows.isEmpty()
-                        ? new Recommendation(null, scored.stock(), scored.score(), action, indexName, weekDate, null)
-                        : existingRows.get(0);
-
-                recommendation.setMomentumScore(scored.score());
-                recommendation.setAction(action);
-
-                allRecommendations.add(recommendation);
             }
-        }
 
-        recommendationRepository.saveAll(allRecommendations);
+            recommendationRepository.saveAll(allRecommendations);
+
+            long durationMs = System.currentTimeMillis() - startTime;
+            metricsService.recordRunSuccess(scoredStocks.size(), durationMs);
+        } catch (RuntimeException e) {
+            long durationMs = System.currentTimeMillis() - startTime;
+            metricsService.recordRunFailure(e.getMessage(), durationMs);
+            throw e;
+        }
     }
 
     private BigDecimal calculateMomentumScore(Stock stock) throws Exception {

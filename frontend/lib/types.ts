@@ -63,3 +63,33 @@ export interface MeResponse {
   id: number;
   email: string;
 }
+
+export interface HealthStatus {
+  status: 'UP' | 'DOWN';
+}
+
+export interface AlgorithmStats {
+  status: 'NEVER_RUN' | 'RUNNING' | 'SUCCESS' | 'FAILED';
+  last_run_at: string | null;
+  duration_ms: number | null;
+  stocks_scored: number | null;
+  last_error: string | null;
+}
+
+export interface TradingStats {
+  total_trades: number;
+  buy_count: number;
+  sell_count: number;
+}
+
+export interface DatabaseStats {
+  stock_count: number;
+  recommendation_count: number;
+}
+
+export interface MetricsResponse {
+  health: HealthStatus;
+  algorithm: AlgorithmStats;
+  trading: TradingStats;
+  database: DatabaseStats;
+}

@@ -130,55 +130,62 @@ public class TradeService {
                             + "$1.00 minimum notional. Enter at least $" + recommendationCount + ".00.");
         }
 
-        List<TradeResult> results = new ArrayList<>();
+        // Placed in parallel rather than one stock at a time: sequentially, a full BUY list can take
+        // several minutes (each order can wait up to 24s for a fill via waitForFill), long enough that
+        // the connection gets cut before the response reaches the browser even though the backend keeps
+        // running and saves everything correctly. In parallel, total wall-clock time is bounded by the
+        // single slowest order instead of the sum of all of them.
+        List<TradeResult> results = buyRecommendations.parallelStream()
+                .map(recommendation -> {
+                    Stock stock = recommendation.getStock();
+                    try {
+                        // requestNotionalMarketOrder() hardcodes OrderTimeInForce.GOOD_UNTIL_CANCELLED, but Alpaca
+                        // rejects fractional/notional orders with GTC (error 42210000) — they must be DAY orders.
+                        Order order = userAlpacaAPI.orders().requestOrder(
+                                stock.getSymbol(), null, amountPerStock.doubleValue(), OrderSide.BUY,
+                                OrderType.MARKET, OrderTimeInForce.DAY,
+                                null, null, null, null, null, null, null, null, null, null);
 
-        for (Recommendation recommendation : buyRecommendations) {
-            Stock stock = recommendation.getStock();
-            try {
-                // requestNotionalMarketOrder() hardcodes OrderTimeInForce.GOOD_UNTIL_CANCELLED, but Alpaca
-                // rejects fractional/notional orders with GTC (error 42210000) — they must be DAY orders.
-                Order order = userAlpacaAPI.orders().requestOrder(
-                        stock.getSymbol(), null, amountPerStock.doubleValue(), OrderSide.BUY,
-                        OrderType.MARKET, OrderTimeInForce.DAY,
-                        null, null, null, null, null, null, null, null, null, null);
+                        // Alpaca fills orders asynchronously; the immediate POST /orders response often
+                        // doesn't include fill data yet. Poll for the fill, then re-fetch the order to pick it up.
+                        Order filledOrder = waitForFill(userAlpacaAPI, order.getId());
+                        if (filledOrder != null) {
+                            order = filledOrder;
+                        }
 
-                // Alpaca fills orders asynchronously; the immediate POST /orders response often
-                // doesn't include fill data yet. Poll for the fill, then re-fetch the order to pick it up.
-                Order filledOrder = waitForFill(userAlpacaAPI, order.getId());
-                if (filledOrder != null) {
-                    order = filledOrder;
-                }
+                        String fillPriceStr = order.getAverageFillPrice();
+                        String fillQtyStr = order.getFilledQuantity();
 
-                String fillPriceStr = order.getAverageFillPrice();
-                String fillQtyStr = order.getFilledQuantity();
+                        BigDecimal filledPrice = (fillPriceStr != null && !fillPriceStr.isEmpty())
+                                ? new BigDecimal(fillPriceStr)
+                                : BigDecimal.ZERO;
 
-                BigDecimal filledPrice = (fillPriceStr != null && !fillPriceStr.isEmpty())
-                        ? new BigDecimal(fillPriceStr)
-                        : BigDecimal.ZERO;
+                        BigDecimal filledQty = (fillQtyStr != null && !fillQtyStr.isEmpty())
+                                ? new BigDecimal(fillQtyStr)
+                                : BigDecimal.ZERO;
 
-                BigDecimal filledQty = (fillQtyStr != null && !fillQtyStr.isEmpty())
-                        ? new BigDecimal(fillQtyStr)
-                        : BigDecimal.ZERO;
+                        Trade trade = new Trade(
+                                null,
+                                user,
+                                stock,
+                                recommendation,
+                                ActionType.BUY,
+                                amountPerStock,
+                                filledPrice,
+                                filledQty,
+                                order.getId(),
+                                null
+                        );
+                        tradeRepository.save(trade);
 
-                Trade trade = new Trade(
-                        null,
-                        user,
-                        stock,
-                        recommendation,
-                        ActionType.BUY,
-                        amountPerStock,
-                        filledPrice,
-                        filledQty,
-                        order.getId(),
-                        null
-                );
-                tradeRepository.save(trade);
-
-                results.add(new TradeResult(stock.getSymbol(), amountPerStock, filledQty, filledPrice));
-            } catch (Exception e) {
-                log.warn("Buy order failed for {} (user {}): {}", stock.getSymbol(), userId, e.getMessage(), e);
-            }
-        }
+                        return new TradeResult(stock.getSymbol(), amountPerStock, filledQty, filledPrice);
+                    } catch (Exception e) {
+                        log.warn("Buy order failed for {} (user {}): {}", stock.getSymbol(), userId, e.getMessage(), e);
+                        return null;
+                    }
+                })
+                .filter(result -> result != null)
+                .collect(Collectors.toList());
 
         log.info("Buy complete: {} orders placed, {} filled with price data",
                 results.size(),
@@ -229,63 +236,75 @@ public class TradeService {
             return new SellResponse(List.of(), "No positions match this week's sell recommendations", List.of());
         }
 
-        List<TradeResult> results = new ArrayList<>();
-        List<SellFailure> failures = new ArrayList<>();
+        // Placed in parallel for the same reason as buy(): sequentially, this loop can take long enough
+        // (up to 24s per order) that the connection gets cut before the response reaches the browser.
+        List<SellOutcome> outcomes = matchedPositions.parallelStream()
+                .map(position -> {
+                    Recommendation recommendation = sellRecommendationsBySymbol.get(position.getSymbol());
+                    Stock stock = recommendation.getStock();
+                    try {
+                        BigDecimal quantity = new BigDecimal(position.getQuantity());
 
-        for (Position position : matchedPositions) {
-            Recommendation recommendation = sellRecommendationsBySymbol.get(position.getSymbol());
-            Stock stock = recommendation.getStock();
-            try {
-                BigDecimal quantity = new BigDecimal(position.getQuantity());
+                        // requestFractionalMarketOrder() hardcodes OrderTimeInForce.GOOD_UNTIL_CANCELLED, but Alpaca
+                        // rejects fractional/notional orders with GTC (error 42210000) — they must be DAY orders.
+                        Order order = userAlpacaAPI.orders().requestOrder(
+                                stock.getSymbol(), quantity.doubleValue(), null, OrderSide.SELL,
+                                OrderType.MARKET, OrderTimeInForce.DAY,
+                                null, null, null, null, null, null, null, null, null, null);
 
-                // requestFractionalMarketOrder() hardcodes OrderTimeInForce.GOOD_UNTIL_CANCELLED, but Alpaca
-                // rejects fractional/notional orders with GTC (error 42210000) — they must be DAY orders.
-                Order order = userAlpacaAPI.orders().requestOrder(
-                        stock.getSymbol(), quantity.doubleValue(), null, OrderSide.SELL,
-                        OrderType.MARKET, OrderTimeInForce.DAY,
-                        null, null, null, null, null, null, null, null, null, null);
+                        // Alpaca fills orders asynchronously; the immediate POST /orders response often
+                        // doesn't include fill data yet. Poll for the fill, then re-fetch the order to pick it up.
+                        Order filledOrder = waitForFill(userAlpacaAPI, order.getId());
+                        if (filledOrder != null) {
+                            order = filledOrder;
+                        }
 
-                // Alpaca fills orders asynchronously; the immediate POST /orders response often
-                // doesn't include fill data yet. Poll for the fill, then re-fetch the order to pick it up.
-                Order filledOrder = waitForFill(userAlpacaAPI, order.getId());
-                if (filledOrder != null) {
-                    order = filledOrder;
-                }
+                        String fillPriceStr = order.getAverageFillPrice();
+                        String fillQtyStr = order.getFilledQuantity();
 
-                String fillPriceStr = order.getAverageFillPrice();
-                String fillQtyStr = order.getFilledQuantity();
+                        BigDecimal filledPrice = (fillPriceStr != null && !fillPriceStr.isEmpty())
+                                ? new BigDecimal(fillPriceStr)
+                                : BigDecimal.ZERO;
 
-                BigDecimal filledPrice = (fillPriceStr != null && !fillPriceStr.isEmpty())
-                        ? new BigDecimal(fillPriceStr)
-                        : BigDecimal.ZERO;
+                        BigDecimal filledQty = (fillQtyStr != null && !fillQtyStr.isEmpty())
+                                ? new BigDecimal(fillQtyStr)
+                                : BigDecimal.ZERO;
 
-                BigDecimal filledQty = (fillQtyStr != null && !fillQtyStr.isEmpty())
-                        ? new BigDecimal(fillQtyStr)
-                        : BigDecimal.ZERO;
+                        BigDecimal amountReceived = filledPrice.multiply(filledQty);
 
-                BigDecimal amountReceived = filledPrice.multiply(filledQty);
+                        Trade trade = new Trade(
+                                null,
+                                user,
+                                stock,
+                                recommendation,
+                                ActionType.SELL,
+                                amountReceived,
+                                filledPrice,
+                                filledQty,
+                                order.getId(),
+                                null
+                        );
+                        tradeRepository.save(trade);
 
-                Trade trade = new Trade(
-                        null,
-                        user,
-                        stock,
-                        recommendation,
-                        ActionType.SELL,
-                        amountReceived,
-                        filledPrice,
-                        filledQty,
-                        order.getId(),
-                        null
-                );
-                tradeRepository.save(trade);
+                        return new SellOutcome(
+                                new TradeResult(stock.getSymbol(), amountReceived, filledQty, filledPrice), null);
+                    } catch (Exception e) {
+                        String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
+                        log.warn("Sell order failed for {} (user {}): {}", stock.getSymbol(), userId, reason);
+                        return new SellOutcome(null, new SellFailure(stock.getSymbol(), reason));
+                    }
+                })
+                .collect(Collectors.toList());
 
-                results.add(new TradeResult(stock.getSymbol(), amountReceived, filledQty, filledPrice));
-            } catch (Exception e) {
-                String reason = e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName();
-                log.warn("Sell order failed for {} (user {}): {}", stock.getSymbol(), userId, reason);
-                failures.add(new SellFailure(stock.getSymbol(), reason));
-            }
-        }
+        List<TradeResult> results = outcomes.stream()
+                .map(SellOutcome::result)
+                .filter(result -> result != null)
+                .collect(Collectors.toList());
+
+        List<SellFailure> failures = outcomes.stream()
+                .map(SellOutcome::failure)
+                .filter(failure -> failure != null)
+                .collect(Collectors.toList());
 
         return new SellResponse(results, null, failures);
     }
@@ -336,6 +355,9 @@ public class TradeService {
     }
 
     public record SellFailure(String symbol, String reason) {
+    }
+
+    private record SellOutcome(TradeResult result, SellFailure failure) {
     }
 
     public record SellResponse(List<TradeResult> trades, String message, List<SellFailure> failures) {

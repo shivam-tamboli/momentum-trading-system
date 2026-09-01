@@ -2,6 +2,7 @@ package com.momentum.controller;
 
 import com.momentum.exception.InsufficientBalanceException;
 import com.momentum.exception.InvalidTradeAmountException;
+import com.momentum.exception.MarketClosedException;
 import com.momentum.model.Trade;
 import com.momentum.model.User;
 import com.momentum.model.enums.ActionType;
@@ -53,6 +54,8 @@ public class TradeController {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         } catch (InvalidTradeAmountException e) {
             return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        } catch (MarketClosedException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
         }
     }
 
@@ -62,7 +65,12 @@ public class TradeController {
             return ResponseEntity.notFound().build();
         }
 
-        TradeService.SellResponse response = tradeService.sell(userId);
+        TradeService.SellResponse response;
+        try {
+            response = tradeService.sell(userId);
+        } catch (MarketClosedException e) {
+            return ResponseEntity.badRequest().body(new ErrorResponse(e.getMessage()));
+        }
 
         if (response.trades().isEmpty() && response.failures().isEmpty() && response.message() != null) {
             return ResponseEntity.ok(new MessageResponse(response.message()));

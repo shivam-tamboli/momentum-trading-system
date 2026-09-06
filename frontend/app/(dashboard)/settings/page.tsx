@@ -29,6 +29,12 @@ const INDEX_LABELS: Record<SelectableIndex, string> = {
   FULL_MARKET: 'Full Market',
 };
 
+// The index picker only ever offers these 4 — Full Market is a valid selectedIndex value
+// elsewhere in the app (recommendations, dashboard), but isn't one of the choices presented here.
+const PICKER_INDEXES = SELECTABLE_INDEXES.filter(
+  (index): index is Exclude<SelectableIndex, 'FULL_MARKET'> => index !== 'FULL_MARKET'
+);
+
 export default function SettingsPage() {
   const { hasAlpacaKey, selectedIndex, investmentAmount, refetch } = useUser();
 
@@ -250,14 +256,14 @@ function IndexPickerCard({
           currently hold, then buys that index&apos;s new top 5.
           {investmentAmount == null && (
             <span className="mt-1 block text-destructive">
-              Set your investment amount above before switching index.
+              Please set your investment amount first
             </span>
           )}
         </CardDescription>
       </CardHeader>
       <CardContent>
         <div className="flex flex-wrap gap-2">
-          {SELECTABLE_INDEXES.map((index) => {
+          {PICKER_INDEXES.map((index) => {
             const isActive = selectedIndex === index;
             return (
               <Button

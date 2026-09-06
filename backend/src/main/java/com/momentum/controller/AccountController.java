@@ -3,6 +3,7 @@ package com.momentum.controller;
 import com.momentum.config.AlpacaConfig;
 import com.momentum.model.User;
 import com.momentum.repository.UserRepository;
+import com.momentum.service.UserAuthorizationService;
 import com.momentum.util.EncryptionUtil;
 import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.account.Account;
@@ -24,17 +25,25 @@ public class AccountController {
     private final UserRepository userRepository;
     private final AlpacaConfig alpacaConfig;
     private final EncryptionUtil encryptionUtil;
+    private final UserAuthorizationService userAuthorizationService;
 
     public AccountController(UserRepository userRepository,
                               AlpacaConfig alpacaConfig,
-                              EncryptionUtil encryptionUtil) {
+                              EncryptionUtil encryptionUtil,
+                              UserAuthorizationService userAuthorizationService) {
         this.userRepository = userRepository;
         this.alpacaConfig = alpacaConfig;
         this.encryptionUtil = encryptionUtil;
+        this.userAuthorizationService = userAuthorizationService;
     }
 
     @GetMapping("/{userId}/account")
     public ResponseEntity<?> getAccount(@PathVariable Long userId) {
+        if (!userAuthorizationService.isOwnedByCaller(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("You do not have access to this account"));
+        }
+
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             return ResponseEntity.notFound().build();
@@ -60,6 +69,11 @@ public class AccountController {
 
     @GetMapping("/{userId}/positions")
     public ResponseEntity<?> getPositions(@PathVariable Long userId) {
+        if (!userAuthorizationService.isOwnedByCaller(userId)) {
+            return ResponseEntity.status(HttpStatus.FORBIDDEN)
+                    .body(new ErrorResponse("You do not have access to this account"));
+        }
+
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             return ResponseEntity.notFound().build();

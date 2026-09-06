@@ -11,6 +11,7 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.hibernate.annotations.CreationTimestamp;
 
+import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
@@ -27,11 +28,23 @@ public class User {
     @Column(nullable = false, unique = true)
     private String email;
 
-    @Column(name = "alpaca_api_key_encrypted", nullable = false)
+    // Nullable now: a user can exist before ever entering an Alpaca key (onboarding screen shows
+    // until they do). Not encrypted — plaintext by explicit instruction, matching the existing
+    // EncryptionUtil passthrough.
+    @Column(name = "alpaca_api_key_encrypted")
     private String alpacaApiKeyEncrypted;
 
-    @Column(name = "alpaca_api_secret_encrypted", nullable = false)
+    @Column(name = "alpaca_api_secret_encrypted")
     private String alpacaApiSecretEncrypted;
+
+    // "S&P 500" / "NASDAQ 100" / "FULL_MARKET" — null until the user picks one.
+    @Column(name = "selected_index")
+    private String selectedIndex;
+
+    // How much to invest per rebalance cycle, set once by the user (onboarding or settings).
+    // Null means auto-trading is skipped entirely for this user — see DailyTradingService.
+    @Column(name = "investment_amount")
+    private BigDecimal investmentAmount;
 
     @CreationTimestamp
     @Column(name = "created_at", updatable = false)

@@ -4,71 +4,50 @@ export interface AccountResponse {
   portfolio_value: number;
 }
 
-export interface Position {
-  symbol: string;
-  qty: number;
-  avg_entry_price: number;
-  current_price: number;
-  unrealized_pl: number;
-}
-
-export interface Recommendation {
-  symbol: string;
-  name: string;
-  momentum_score: number;
-  action: 'BUY' | 'SELL' | 'HOLD';
-  week_date: string;
-}
-
-export interface TradeHistoryItem {
-  symbol: string;
-  action: 'BUY' | 'SELL';
-  amount: number;
-  price_per_share: number;
-  quantity: number;
-  traded_at: string;
-}
-
-export interface BuyRequest {
-  amount: number;
-}
-
-export interface BuyTradeResult {
-  symbol: string;
-  amount_invested: number;
-  shares_bought: number;
-  price: number;
-}
-
-export interface BuyResponse {
-  trades: BuyTradeResult[];
-}
-
 export interface ErrorResponse {
   error: string;
-}
-
-export interface SellTradeResult {
-  symbol: string;
-  shares_sold: number;
-  amount_received: number;
-}
-
-export interface SellFailureResult {
-  symbol: string;
-  reason: string;
-}
-
-export interface SellResponse {
-  trades: SellTradeResult[];
-  message?: string;
-  failures?: SellFailureResult[];
 }
 
 export interface MeResponse {
   id: number;
   email: string;
+  has_alpaca_key: boolean;
+  selected_index: string | null;
+  investment_amount: number | null;
 }
+
+export interface DailyRecommendationItem {
+  symbol: string;
+  name: string;
+  momentum_score: number;
+  scored_at: string;
+}
+
+export type TradeStatus = 'FILLED' | 'PENDING' | 'FAILED';
+
+export interface DailyTradeItem {
+  symbol: string;
+  action: 'BUY' | 'SELL';
+  status: TradeStatus;
+  // Null whenever the real value isn't known yet — a PENDING buy's share count and price aren't
+  // determinable until it fills, and a FAILED order never got any fill data at all. Never a
+  // fabricated 0/$0 standing in for "unknown".
+  amount: number | null;
+  price_per_share: number | null;
+  quantity: number | null;
+  traded_at: string;
+}
+
+export const SELECTABLE_INDEXES = ['S&P 500', 'S&P 400', 'S&P 600', 'NASDAQ 100', 'FULL_MARKET'] as const;
+export type SelectableIndex = (typeof SELECTABLE_INDEXES)[number];
+
+export const INDEX_RECOMMENDATION_PATH: Record<SelectableIndex, string> = {
+  'S&P 500': 'snp500',
+  'S&P 400': 'sp400',
+  'S&P 600': 'sp600',
+  'NASDAQ 100': 'nasdaq100',
+  FULL_MARKET: 'full-market',
+};
 
 export interface HealthStatus {
   status: 'UP' | 'DOWN';

@@ -1,11 +1,12 @@
 package com.momentum.controller;
 
 import com.momentum.model.enums.ActionType;
-import com.momentum.repository.RecommendationRepository;
-import com.momentum.repository.StockRepository;
-import com.momentum.repository.TradeRepository;
+import com.momentum.repository.DailyRecommendationRepository;
+import com.momentum.repository.DailyTradeRepository;
+import com.momentum.service.DailyScoringService;
+import com.momentum.service.DailyTradingService;
+import com.momentum.service.IndexConstituentService;
 import com.momentum.service.MetricsService;
-import com.momentum.service.MomentumAlgorithmService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -13,54 +14,89 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
+import java.util.HashSet;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/admin")
 public class AdminController {
 
-    private final MomentumAlgorithmService momentumAlgorithmService;
     private final MetricsService metricsService;
-    private final StockRepository stockRepository;
-    private final RecommendationRepository recommendationRepository;
-    private final TradeRepository tradeRepository;
+    private final DailyRecommendationRepository dailyRecommendationRepository;
+    private final DailyTradeRepository dailyTradeRepository;
+    private final IndexConstituentService indexConstituentService;
+    private final DailyScoringService dailyScoringService;
+    private final DailyTradingService dailyTradingService;
 
-    public AdminController(MomentumAlgorithmService momentumAlgorithmService,
-                            MetricsService metricsService,
-                            StockRepository stockRepository,
-                            RecommendationRepository recommendationRepository,
-                            TradeRepository tradeRepository) {
-        this.momentumAlgorithmService = momentumAlgorithmService;
+    public AdminController(MetricsService metricsService,
+                            DailyRecommendationRepository dailyRecommendationRepository,
+                            DailyTradeRepository dailyTradeRepository,
+                            IndexConstituentService indexConstituentService,
+                            DailyScoringService dailyScoringService,
+                            DailyTradingService dailyTradingService) {
         this.metricsService = metricsService;
-        this.stockRepository = stockRepository;
-        this.recommendationRepository = recommendationRepository;
-        this.tradeRepository = tradeRepository;
+        this.dailyRecommendationRepository = dailyRecommendationRepository;
+        this.dailyTradeRepository = dailyTradeRepository;
+        this.indexConstituentService = indexConstituentService;
+        this.dailyScoringService = dailyScoringService;
+        this.dailyTradingService = dailyTradingService;
     }
 
-    @PostMapping("/run-algorithm")
-    public ResponseEntity<String> runAlgorithm() {
+    // Temporary manual triggers for development/testing of the daily engine, standing in for
+    // the dynamic Alpaca-Clock-driven scheduler until that's wired in (see plan Stage 5).
+    @PostMapping("/sync-index-constituents")
+    public ResponseEntity<String> syncIndexConstituents() {
         try {
-            momentumAlgorithmService.generateWeeklyRecommendations();
-            return ResponseEntity.ok("Algorithm completed successfully. Recommendations generated for all 4 indexes.");
+            String summary = indexConstituentService.refresh();
+            return ResponseEntity.ok(summary);
         } catch (Exception e) {
-            return ResponseEntity.status(500).body("Algorithm failed: " + e.getMessage());
+            return ResponseEntity.status(500).body("Index constituent sync failed: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/run-daily-scoring")
+    public ResponseEntity<String> runDailyScoring() {
+        try {
+            dailyScoringService.runDailyScoring();
+            return ResponseEntity.ok("Daily scoring completed successfully.");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Daily scoring failed: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/run-daily-trading")
+    public ResponseEntity<String> runDailyTrading() {
+        try {
+            dailyTradingService.runDailyTrading();
+            return ResponseEntity.ok("Daily trading run completed.");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Daily trading failed: " + e.getMessage());
         }
     }
 
     @GetMapping("/metrics")
     public ResponseEntity<MetricsResponse> metrics() {
         String dbStatus = "UP";
-        long stockCount = 0;
+        long universeSize = 0;
         long recommendationCount = 0;
         long totalTrades = 0;
         long buyCount = 0;
         long sellCount = 0;
 
         try {
-            stockCount = stockRepository.count();
-            recommendationCount = recommendationRepository.count();
-            totalTrades = tradeRepository.count();
-            buyCount = tradeRepository.countByAction(ActionType.BUY);
-            sellCount = tradeRepository.countByAction(ActionType.SELL);
+            // "Stock count" for the daily engine means the current tracked universe — the union of
+            // all 4 index constituent lists — since this system never persists a stock catalog.
+            Set<String> universe = new HashSet<>();
+            universe.addAll(indexConstituentService.getConstituents(IndexConstituentService.SP500));
+            universe.addAll(indexConstituentService.getConstituents(IndexConstituentService.NASDAQ100));
+            universe.addAll(indexConstituentService.getConstituents(IndexConstituentService.SP400));
+            universe.addAll(indexConstituentService.getConstituents(IndexConstituentService.SP600));
+            universeSize = universe.size();
+
+            recommendationCount = dailyRecommendationRepository.count();
+            totalTrades = dailyTradeRepository.count();
+            buyCount = dailyTradeRepository.countByAction(ActionType.BUY);
+            sellCount = dailyTradeRepository.countByAction(ActionType.SELL);
         } catch (Exception e) {
             dbStatus = "DOWN";
         }
@@ -75,7 +111,7 @@ public class AdminController {
                         metricsService.getLastRunError()
                 ),
                 new TradingStats(totalTrades, buyCount, sellCount),
-                new DatabaseStats(stockCount, recommendationCount)
+                new DatabaseStats(universeSize, recommendationCount)
         );
 
         return ResponseEntity.ok(response);

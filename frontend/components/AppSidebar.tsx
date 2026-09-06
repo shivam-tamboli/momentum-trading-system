@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, LineChart, History, LogOut, TrendingUp, Activity } from 'lucide-react';
+import { LayoutDashboard, LineChart, LogOut, TrendingUp, Activity, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -12,7 +12,7 @@ import { useUser } from '@/lib/user-context';
 const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/recommendations', label: 'Recommendations', icon: LineChart },
-  { href: '/trades', label: 'Trade History', icon: History },
+  { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/admin', label: 'System Metrics', icon: Activity },
 ];
 

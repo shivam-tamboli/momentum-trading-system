@@ -1,66 +1,67 @@
 package com.momentum.controller;
 
-import com.momentum.model.enums.ActionType;
-import com.momentum.repository.RecommendationRepository;
+import com.momentum.repository.DailyRecommendationRepository;
+import com.momentum.service.DailyScoringService;
+import com.momentum.service.IndexConstituentService;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.math.BigDecimal;
-import java.time.DayOfWeek;
-import java.time.LocalDate;
-import java.time.temporal.TemporalAdjusters;
+import java.time.LocalDateTime;
 import java.util.List;
 import java.util.stream.Collectors;
 
+/**
+ * Reads today's top 5 from the daily engine ({@code daily_recommendation}, written by
+ * {@link DailyScoringService}) — not the old weekly system's {@code recommendation} table, which
+ * is frozen and unrelated to this now.
+ */
 @RestController
 @RequestMapping("/recommendations")
 public class RecommendationController {
 
-    private final RecommendationRepository recommendationRepository;
+    private final DailyRecommendationRepository dailyRecommendationRepository;
 
-    public RecommendationController(RecommendationRepository recommendationRepository) {
-        this.recommendationRepository = recommendationRepository;
+    public RecommendationController(DailyRecommendationRepository dailyRecommendationRepository) {
+        this.dailyRecommendationRepository = dailyRecommendationRepository;
     }
 
     @GetMapping("/snp500")
     public List<RecommendationResponse> getSnp500() {
-        return getRecommendationsForIndex("S&P 500");
+        return getForFilter(IndexConstituentService.SP500);
     }
 
-    @GetMapping("/snp400")
-    public List<RecommendationResponse> getSnp400() {
-        return getRecommendationsForIndex("S&P 400");
+    @GetMapping("/sp400")
+    public List<RecommendationResponse> getSp400() {
+        return getForFilter(IndexConstituentService.SP400);
     }
 
-    @GetMapping("/snp600")
-    public List<RecommendationResponse> getSnp600() {
-        return getRecommendationsForIndex("S&P 600");
+    @GetMapping("/sp600")
+    public List<RecommendationResponse> getSp600() {
+        return getForFilter(IndexConstituentService.SP600);
     }
 
     @GetMapping("/nasdaq100")
     public List<RecommendationResponse> getNasdaq100() {
-        return getRecommendationsForIndex("Nasdaq 100");
+        return getForFilter(IndexConstituentService.NASDAQ100);
     }
 
-    private List<RecommendationResponse> getRecommendationsForIndex(String indexName) {
-        LocalDate weekDate = LocalDate.now().with(TemporalAdjusters.previousOrSame(DayOfWeek.MONDAY));
+    @GetMapping("/full-market")
+    public List<RecommendationResponse> getFullMarket() {
+        return getForFilter(DailyScoringService.FULL_MARKET);
+    }
 
-        return recommendationRepository.findLatestByIndexNameAndWeekDate(indexName, weekDate).stream()
-                .map(recommendation -> new RecommendationResponse(
-                        recommendation.getStock().getSymbol(),
-                        recommendation.getStock().getName(),
-                        recommendation.getMomentumScore(),
-                        recommendation.getAction(),
-                        recommendation.getWeekDate()
-                ))
+    private List<RecommendationResponse> getForFilter(String filterName) {
+        return dailyRecommendationRepository.findByFilterNameOrderByMomentumScoreDesc(filterName).stream()
+                .map(r -> new RecommendationResponse(r.getSymbol(), r.getName(), r.getMomentumScore(),
+                        r.getScoredAt()))
                 .collect(Collectors.toList());
     }
 
-    public record RecommendationResponse(String symbol,
-                                          String name,
-                                          BigDecimal momentumScore,
-                                          ActionType action,
-                                          LocalDate weekDate) {
+    // scoredAt lets the frontend tell fresh data from data kept by the safe-wipe guard after a
+    // failed scoring run — never show stale recommendations as if they were computed today.
+    public record RecommendationResponse(String symbol, String name, BigDecimal momentumScore,
+                                          LocalDateTime scoredAt) {
     }
 }

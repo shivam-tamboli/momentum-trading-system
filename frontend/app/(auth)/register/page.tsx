@@ -5,6 +5,7 @@ import { useRouter } from 'next/navigation';
 import { isAxiosError } from 'axios';
 import { Eye, EyeOff } from 'lucide-react';
 import { api } from '@/lib/api';
+import { useUser } from '@/lib/user-context';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -17,8 +18,12 @@ import {
 } from '@/components/ui/card';
 import type { ErrorResponse, MeResponse } from '@/lib/types';
 
+// This is the one-time onboarding screen: shown when a logged-in user has no Alpaca key saved
+// yet. Saves the key once via PUT /users/me/alpaca-key — the system uses it for every future
+// trade after that, the user is never asked again (Settings is where they'd update it later).
 export default function RegisterPage() {
   const router = useRouter();
+  const { refetch } = useUser();
   const [alpacaApiKey, setAlpacaApiKey] = useState('');
   const [alpacaApiSecret, setAlpacaApiSecret] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -31,16 +36,17 @@ export default function RegisterPage() {
     setIsSubmitting(true);
 
     try {
-      await api.post<MeResponse>('/users/register', {
+      await api.put<MeResponse>('/users/me/alpaca-key', {
         alpacaApiKey,
         alpacaApiSecret,
       });
+      await refetch();
       router.push('/dashboard');
       router.refresh();
     } catch (err) {
       const message = isAxiosError<ErrorResponse>(err)
-        ? err.response?.data?.error ?? 'Registration failed.'
-        : 'Registration failed.';
+        ? err.response?.data?.error ?? 'Could not save your Alpaca key.'
+        : 'Could not save your Alpaca key.';
       setError(message);
     } finally {
       setIsSubmitting(false);
@@ -54,7 +60,8 @@ export default function RegisterPage() {
           <CardTitle>Connect your Alpaca account</CardTitle>
           <CardDescription>
             Enter your Alpaca paper trading API key and secret to finish setting up your
-            account. These are encrypted before they&apos;re stored.
+            account. You&apos;ll only need to do this once — the system uses it automatically
+            for every future trade.
           </CardDescription>
         </CardHeader>
         <CardContent>

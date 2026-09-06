@@ -1,7 +1,7 @@
 'use client';
 
 import { ReactNode, useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
@@ -11,15 +11,26 @@ import { useUser } from '@/lib/user-context';
 export default function DashboardLayout({ children }: { children: ReactNode }) {
   const [mobileNavOpen, setMobileNavOpen] = useState(false);
   const router = useRouter();
-  const { userId, isLoading } = useUser();
+  const pathname = usePathname();
+  const { userId, hasAlpacaKey, isLoading } = useUser();
+
+  // Onboarding only redirects from the dashboard's landing page — it must not block
+  // Recommendations, Settings, etc., since users without a key can still browse those
+  // (they just can't trade). Only /dashboard itself sends a keyless user to onboarding.
+  const needsOnboarding = !hasAlpacaKey && pathname === '/dashboard';
 
   useEffect(() => {
-    if (!isLoading && userId === null) {
+    if (isLoading) {
+      return;
+    }
+    if (userId === null) {
+      router.replace('/login');
+    } else if (needsOnboarding) {
       router.replace('/register');
     }
-  }, [isLoading, userId, router]);
+  }, [isLoading, userId, needsOnboarding, router]);
 
-  if (isLoading || userId === null) {
+  if (isLoading || userId === null || needsOnboarding) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Loading account…</p>

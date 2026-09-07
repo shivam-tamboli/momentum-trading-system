@@ -15,7 +15,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "Momentum Trading System",
-  description: "Weekly momentum-based stock recommendations and trading",
+  description: "Daily automated momentum-based stock recommendations and trading",
 };
 
 export default function RootLayout({ children }: LayoutProps<"/">) {

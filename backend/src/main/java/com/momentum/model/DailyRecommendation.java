@@ -40,7 +40,11 @@ public class DailyRecommendation {
     @Column(nullable = false)
     private String name;
 
-    @Column(name = "momentum_score", nullable = false)
+    // precision/scale must match DailyScoringService's calculateMomentumScore(), which computes to
+    // 6 decimal places (.setScale(6, ...)) — without an explicit scale here, Hibernate's schema
+    // generator defaults BigDecimal columns to scale 2, silently truncating every stored score to
+    // cents-level precision even though the algorithm computed something far more precise.
+    @Column(name = "momentum_score", nullable = false, precision = 10, scale = 6)
     private BigDecimal momentumScore;
 
     @CreationTimestamp

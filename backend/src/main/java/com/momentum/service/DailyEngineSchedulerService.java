@@ -42,7 +42,6 @@ public class DailyEngineSchedulerService {
     private static final Long STATE_ID = 1L;
 
     private final AlpacaAPI systemAlpacaAPI;
-    private final IndexConstituentService indexConstituentService;
     private final DailyScoringService dailyScoringService;
     private final DailyTradingService dailyTradingService;
     private final SchedulerStateRepository schedulerStateRepository;
@@ -52,12 +51,10 @@ public class DailyEngineSchedulerService {
     private volatile LocalDate job2LastRunDate;
 
     public DailyEngineSchedulerService(AlpacaAPI systemAlpacaAPI,
-                                        IndexConstituentService indexConstituentService,
                                         DailyScoringService dailyScoringService,
                                         DailyTradingService dailyTradingService,
                                         SchedulerStateRepository schedulerStateRepository) {
         this.systemAlpacaAPI = systemAlpacaAPI;
-        this.indexConstituentService = indexConstituentService;
         this.dailyScoringService = dailyScoringService;
         this.dailyTradingService = dailyTradingService;
         this.schedulerStateRepository = schedulerStateRepository;
@@ -120,12 +117,10 @@ public class DailyEngineSchedulerService {
 
         job1LastRunDate = tradingDay;
         persistState();
-        log.info("Scheduler: Job 1 window reached ({} until open at {}) — refreshing index constituents "
-                + "and running daily scoring for {}", java.time.Duration.between(now, nextOpen), nextOpen, tradingDay);
+        log.info("Scheduler: Job 1 window reached ({} until open at {}) — running daily scoring for {}",
+                java.time.Duration.between(now, nextOpen), nextOpen, tradingDay);
 
         try {
-            String refreshSummary = indexConstituentService.refresh();
-            log.info("Scheduler: Job 1 index constituent refresh: {}", refreshSummary);
             dailyScoringService.runDailyScoring();
             job1LastSuccessDate = tradingDay;
             persistState();

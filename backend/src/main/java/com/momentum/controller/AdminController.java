@@ -42,18 +42,8 @@ public class AdminController {
         this.dailyTradingService = dailyTradingService;
     }
 
-    // Temporary manual triggers for development/testing of the daily engine, standing in for
-    // the dynamic Alpaca-Clock-driven scheduler until that's wired in (see plan Stage 5).
-    @PostMapping("/sync-index-constituents")
-    public ResponseEntity<String> syncIndexConstituents() {
-        try {
-            String summary = indexConstituentService.refresh();
-            return ResponseEntity.ok(summary);
-        } catch (Exception e) {
-            return ResponseEntity.status(500).body("Index constituent sync failed: " + e.getMessage());
-        }
-    }
-
+    // Manual triggers for development/testing of the daily engine — the scheduler fires these
+    // automatically on its own each trading day.
     @PostMapping("/run-daily-scoring")
     public ResponseEntity<String> runDailyScoring() {
         try {

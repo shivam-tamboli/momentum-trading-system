@@ -1,0 +1,38 @@
+name: Update index constituents
+
+on:
+  schedule:
+    # Daily at midnight UTC.
+    - cron: "0 0 * * *"
+  workflow_dispatch: {}
+
+jobs:
+  update:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Fetch current constituents
+        run: python3 scripts/update_index_constituents.py
+
+      - name: Open a PR if anything changed
+        uses: peter-evans/create-pull-request@v6
+        with:
+          commit-message: "chore: update index constituents"
+          title: "chore: update index constituents"
+          body: |
+            Automated daily refresh from the sources in `scripts/update_index_constituents.py`
+            (State Street SPDR SPY/MDY/SPSM official holdings, SlickCharts Nasdaq-100).
+
+            This changes which stocks the daily trading engine can buy — please review the
+            diff before merging.
+          branch: update-index-constituents
+          delete-branch: true
+          add-paths: backend/src/main/resources/index-constituents/*.txt

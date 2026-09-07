@@ -75,36 +75,6 @@ public class UserController {
         return ResponseEntity.ok(toMeResponse(user));
     }
 
-    // Kept working for backward compatibility — key fields are now optional. Existing callers
-    // that already pass a key still work exactly as before; new callers can register bare and
-    // save a key later via PUT /users/me/alpaca-key.
-    @PostMapping("/users/register")
-    public ResponseEntity<?> register(
-            @RequestHeader(value = "Authorization", required = false) String authHeader,
-            @RequestBody RegisterRequest request) {
-
-        String email;
-        try {
-            email = resolveEmailFromHeader(authHeader);
-        } catch (UnauthorizedException e) {
-            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(e.getMessage()));
-        }
-
-        User existingUser = userRepository.findByEmail(email).orElse(null);
-        if (existingUser != null) {
-            return ResponseEntity.ok(toMeResponse(existingUser));
-        }
-
-        String encryptedKey = request.alpacaApiKey() != null ? encryptionUtil.encrypt(request.alpacaApiKey()) : null;
-        String encryptedSecret =
-                request.alpacaApiSecret() != null ? encryptionUtil.encrypt(request.alpacaApiSecret()) : null;
-
-        User newUser = new User(null, email, encryptedKey, encryptedSecret, null, null, null);
-        User savedUser = userRepository.save(newUser);
-
-        return ResponseEntity.ok(toMeResponse(savedUser));
-    }
-
     // Used by both the onboarding screen (first key) and Settings (updating it later) — the
     // system then uses whatever's saved here for every future trade, the user never re-enters it.
     @PutMapping("/users/me/alpaca-key")
@@ -254,11 +224,6 @@ public class UserController {
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record SupabaseUserResponse(String id, String email) {
-    }
-
-    public record RegisterRequest(
-            @JsonProperty("alpacaApiKey") String alpacaApiKey,
-            @JsonProperty("alpacaApiSecret") String alpacaApiSecret) {
     }
 
     public record SelectedIndexRequest(@JsonProperty("selectedIndex") String selectedIndex) {

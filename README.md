@@ -216,3 +216,35 @@ NEXT_PUBLIC_SUPABASE_URL=
 NEXT_PUBLIC_SUPABASE_ANON_KEY=
 NEXT_PUBLIC_API_BASE_URL=
 ```
+
+## Keeping the server awake
+
+Render's free tier spins the backend down after about 15 minutes with no traffic. The daily engine's own scheduler is an in-process poller — it can only check the market clock while the JVM is actually running, so if the server is asleep during a given day's 3-hour scoring window, that window can pass with nobody home and the whole trading day gets silently skipped. Two things fix this, together:
+
+**1. External cron (GitHub Actions)**
+
+`.github/workflows/daily-trading-cron.yml` calls the two admin endpoints directly on a schedule, weekdays only:
+
+- `10:30 UTC` (6:30 AM ET) — `POST /admin/run-daily-scoring`
+- `13:30 UTC` (9:30 AM ET) — `POST /admin/run-daily-trading`
+
+GitHub runs this regardless of whether the backend is currently awake — the HTTP call itself wakes Render up. If either call fails, the workflow run shows red in the Actions tab and GitHub emails a failure notification automatically. It can also be triggered manually anytime from the Actions tab (`workflow_dispatch`), with a choice of running scoring, trading, or both.
+
+To set it up, add `ADMIN_SECRET_KEY` as a repository secret:
+
+1. Go to the repo on GitHub → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `ADMIN_SECRET_KEY`
+4. Value: the same value set as the backend's `ADMIN_SECRET_KEY` environment variable on Render
+5. Save
+
+**2. Keep-alive (UptimeRobot)**
+
+This keeps the server warm generally, not just during the two cron windows — which also lets the backend's own in-process scheduler work as a redundant backup path, in case GitHub Actions is ever delayed or down.
+
+1. Go to [uptimerobot.com](https://uptimerobot.com) and create a free account
+2. Click **Add New Monitor**
+3. Monitor type: **HTTP(s)**
+4. URL: the Render backend URL (e.g. `https://momentum-trading-backend.onrender.com`)
+5. Monitoring interval: **every 5 minutes**
+6. Save

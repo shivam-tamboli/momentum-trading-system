@@ -1,0 +1,56 @@
+name: Daily trading cron
+
+# External backup for the backend's own in-process scheduler. Render's free tier spins the web
+# service down after ~15 minutes idle, and the in-process scheduler is a @Scheduled poller that
+# can only tick while the JVM is awake — so a whole day's window can pass with nobody home. This
+# workflow calls the same two admin endpoints directly, on a schedule GitHub runs regardless of
+# whether the backend process itself is currently alive (the HTTP call to Render wakes it if not).
+
+on:
+  schedule:
+    # 10:30 UTC = 6:30 AM ET — 3 hours before market open. Job 1: score.
+    - cron: "30 10 * * 1-5"
+    # 13:30 UTC = 9:30 AM ET — market open. Job 2: trade.
+    - cron: "30 13 * * 1-5"
+  workflow_dispatch:
+    inputs:
+      job:
+        description: "Which job to run"
+        type: choice
+        options:
+          - both
+          - scoring
+          - trading
+        default: both
+
+env:
+  BACKEND_URL: https://momentum-trading-backend.onrender.com
+
+jobs:
+  run-daily-scoring:
+    if: >
+      github.event.schedule == '30 10 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'scoring' || github.event.inputs.job == 'both'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/run-daily-scoring
+        run: |
+          curl --fail --show-error --silent --max-time 300 \
+            -X POST "$BACKEND_URL/admin/run-daily-scoring" \
+            -H "X-Admin-Key: $ADMIN_SECRET_KEY"
+        env:
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+
+  run-daily-trading:
+    if: >
+      github.event.schedule == '30 13 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && (github.event.inputs.job == 'trading' || github.event.inputs.job == 'both'))
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/run-daily-trading
+        run: |
+          curl --fail --show-error --silent --max-time 300 \
+            -X POST "$BACKEND_URL/admin/run-daily-trading" \
+            -H "X-Admin-Key: $ADMIN_SECRET_KEY"
+        env:
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}

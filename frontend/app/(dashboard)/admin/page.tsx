@@ -59,9 +59,9 @@ function formatTimestamp(timestamp: string | null): string {
 
 export default function AdminMetricsPage() {
   const metricsQuery = useQuery({
-    queryKey: ['admin-metrics'],
+    queryKey: ['metrics'],
     queryFn: async () => {
-      const { data } = await api.get<MetricsResponse>('/admin/metrics');
+      const { data } = await api.get<MetricsResponse>('/metrics');
       return data;
     },
     refetchInterval: REFRESH_INTERVAL_MS,
@@ -78,6 +78,12 @@ export default function AdminMetricsPage() {
           <p className="text-sm text-muted-foreground">Auto-refreshes every 30 seconds.</p>
         </div>
       </div>
+
+      {metricsQuery.isError && (
+        <p className="rounded-md border border-loss/50 bg-loss/10 px-3 py-2 text-sm font-medium text-loss">
+          Could not load metrics. Retrying automatically.
+        </p>
+      )}
 
       <Card>
         <CardHeader>

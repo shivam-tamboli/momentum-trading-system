@@ -6,6 +6,7 @@ import { Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Sheet, SheetContent, SheetTrigger, SheetTitle } from '@/components/ui/sheet';
 import { AppSidebarContent } from '@/components/AppSidebar';
+import { ConnectingIndicator } from '@/components/ConnectingIndicator';
 import { useUser } from '@/lib/user-context';
 
 export default function DashboardLayout({ children }: { children: ReactNode }) {
@@ -30,7 +31,15 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     }
   }, [isLoading, userId, needsOnboarding, router]);
 
-  if (isLoading || userId === null || needsOnboarding) {
+  if (isLoading) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-background">
+        <ConnectingIndicator />
+      </div>
+    );
+  }
+
+  if (userId === null || needsOnboarding) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-background">
         <p className="text-sm text-muted-foreground">Loading account…</p>

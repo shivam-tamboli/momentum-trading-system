@@ -12,13 +12,13 @@ import { cn } from '@/lib/utils';
 import type { DailyTradeItem } from '@/lib/types';
 
 const ACTION_STYLES: Record<DailyTradeItem['action'], string> = {
-  BUY: 'bg-green-600 text-white hover:bg-green-600',
-  SELL: 'bg-red-600 text-white hover:bg-red-600',
+  BUY: 'bg-gain text-gain-foreground hover:bg-gain',
+  SELL: 'bg-loss text-loss-foreground hover:bg-loss',
 };
 
 const STATUS_STYLES: Record<DailyTradeItem['status'], string> = {
   FILLED: 'bg-secondary text-secondary-foreground',
-  PENDING: 'bg-amber-500 text-white hover:bg-amber-500',
+  PENDING: 'bg-pending text-pending-foreground hover:bg-pending',
   FAILED: 'bg-destructive text-destructive-foreground',
 };
 
@@ -83,7 +83,7 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
           trades?.map((trade, index) => (
             <TableRow
               key={`${trade.symbol}-${trade.traded_at}-${index}`}
-              className={cn(trade.status === 'PENDING' && 'bg-amber-500/10')}
+              className={cn(trade.status === 'PENDING' && 'bg-pending/10')}
             >
               <TableCell className="font-medium">{trade.symbol}</TableCell>
               <TableCell>
@@ -94,9 +94,15 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
                   {trade.status === 'PENDING' ? 'Pending — still processing' : trade.status}
                 </Badge>
               </TableCell>
-              <TableCell className="text-right">{formatCurrency(trade.amount)}</TableCell>
-              <TableCell className="text-right">{formatCurrency(trade.price_per_share)}</TableCell>
-              <TableCell className="text-right">{formatQuantity(trade.quantity)}</TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatCurrency(trade.amount)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatCurrency(trade.price_per_share)}
+              </TableCell>
+              <TableCell className="text-right font-mono tabular-nums">
+                {formatQuantity(trade.quantity)}
+              </TableCell>
               <TableCell className="text-muted-foreground">
                 {dateTimeFormatter.format(new Date(trade.traded_at))}
               </TableCell>

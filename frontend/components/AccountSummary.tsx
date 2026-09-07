@@ -13,30 +13,50 @@ interface AccountSummaryProps {
 }
 
 export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
-  const stats = [
+  const secondaryStats = [
     { label: 'Cash', value: account?.cash },
     { label: 'Buying Power', value: account?.buying_power },
-    { label: 'Portfolio Value', value: account?.portfolio_value },
   ];
 
   return (
-    <div className="grid gap-4 sm:grid-cols-3">
-      {stats.map((stat) => (
-        <Card key={stat.label}>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-sm font-medium text-muted-foreground">
-              {stat.label}
-            </CardTitle>
-          </CardHeader>
-          <CardContent>
-            {isLoading || stat.value === undefined ? (
-              <Skeleton className="h-8 w-28" />
-            ) : (
-              <p className="text-2xl font-bold">{currency.format(stat.value)}</p>
-            )}
-          </CardContent>
-        </Card>
-      ))}
+    <div className="grid gap-4 lg:grid-cols-3">
+      <Card className="lg:col-span-2">
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">
+            Portfolio Value
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading || account?.portfolio_value === undefined ? (
+            <Skeleton className="h-12 w-48" />
+          ) : (
+            <p className="font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+              {currency.format(account.portfolio_value)}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+
+      <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
+        {secondaryStats.map((stat) => (
+          <Card key={stat.label}>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm font-medium text-muted-foreground">
+                {stat.label}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {isLoading || stat.value === undefined ? (
+                <Skeleton className="h-7 w-24" />
+              ) : (
+                <p className="font-mono text-xl font-semibold tabular-nums">
+                  {currency.format(stat.value)}
+                </p>
+              )}
+            </CardContent>
+          </Card>
+        ))}
+      </div>
     </div>
   );
 }

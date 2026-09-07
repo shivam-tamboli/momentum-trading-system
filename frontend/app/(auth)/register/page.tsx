@@ -55,7 +55,20 @@ export default function RegisterPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-md">
+      <div className="w-full max-w-md space-y-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary font-mono text-lg font-bold text-primary-foreground">
+            M
+          </div>
+          <div>
+            <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
+              One-time setup
+            </p>
+            <h1 className="mt-1 text-xl font-semibold">Connect your account</h1>
+          </div>
+        </div>
+
+        <Card className="w-full">
         <CardHeader>
           <CardTitle>Connect your Alpaca account</CardTitle>
           <CardDescription>
@@ -103,7 +116,8 @@ export default function RegisterPage() {
             </Button>
           </form>
         </CardContent>
-      </Card>
+        </Card>
+      </div>
     </div>
   );
 }

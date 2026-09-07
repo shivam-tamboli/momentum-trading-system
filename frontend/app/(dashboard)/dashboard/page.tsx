@@ -4,6 +4,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { AccountSummary } from '@/components/AccountSummary';
+import { AccountActivityChart } from '@/components/AccountActivityChart';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -58,6 +59,18 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
       <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Trading Activity</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <AccountActivityChart
+            trades={dailyTradesQuery.data}
+            isLoading={dailyTradesQuery.isLoading}
+          />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

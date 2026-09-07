@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useState } from 'react';
+import { FormEvent, ReactNode, useState } from 'react';
 import { useMutation } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
 import { Eye, EyeOff } from 'lucide-react';
@@ -35,25 +35,93 @@ const PICKER_INDEXES = SELECTABLE_INDEXES.filter(
   (index): index is Exclude<SelectableIndex, 'FULL_MARKET'> => index !== 'FULL_MARKET'
 );
 
+const currency = new Intl.NumberFormat('en-US', {
+  style: 'currency',
+  currency: 'USD',
+});
+
 export default function SettingsPage() {
   const { hasAlpacaKey, selectedIndex, investmentAmount, refetch } = useUser();
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Settings</h1>
+        <h1 className="text-2xl font-semibold">Strategy</h1>
         <p className="text-sm text-muted-foreground">
-          Manage your Alpaca connection, investment amount, and index selection.
+          Connect an account, set an amount, and pick an index — the daily engine handles the
+          rest.
         </p>
       </div>
 
-      <AlpacaKeyCard hasAlpacaKey={hasAlpacaKey} refetch={refetch} />
-      <InvestmentAmountCard investmentAmount={investmentAmount} refetch={refetch} />
-      <IndexPickerCard
-        selectedIndex={selectedIndex}
-        investmentAmount={investmentAmount}
-        refetch={refetch}
-      />
+      <div className="grid grid-cols-3 divide-x divide-border overflow-hidden rounded-lg border border-border">
+        <StrategyStat
+          label="Account"
+          value={hasAlpacaKey ? 'Connected' : 'Not connected'}
+          active={hasAlpacaKey}
+        />
+        <StrategyStat
+          label="Investment"
+          value={investmentAmount != null ? currency.format(investmentAmount) : 'Not set'}
+          active={investmentAmount != null}
+        />
+        <StrategyStat
+          label="Index"
+          value={selectedIndex ?? 'Not selected'}
+          active={selectedIndex != null}
+        />
+      </div>
+
+      <StrategyStep number={1} label="Connect account">
+        <AlpacaKeyCard hasAlpacaKey={hasAlpacaKey} refetch={refetch} />
+      </StrategyStep>
+      <StrategyStep number={2} label="Set investment amount">
+        <InvestmentAmountCard investmentAmount={investmentAmount} refetch={refetch} />
+      </StrategyStep>
+      <StrategyStep number={3} label="Choose index">
+        <IndexPickerCard
+          selectedIndex={selectedIndex}
+          investmentAmount={investmentAmount}
+          refetch={refetch}
+        />
+      </StrategyStep>
+    </div>
+  );
+}
+
+function StrategyStat({ label, value, active }: { label: string; value: string; active: boolean }) {
+  return (
+    <div className="bg-card px-4 py-3">
+      <p className="text-xs text-muted-foreground uppercase tracking-wide">{label}</p>
+      <p className={cn('mt-1 truncate text-sm font-semibold', active ? 'text-gain' : 'text-muted-foreground')}>
+        {value}
+      </p>
+    </div>
+  );
+}
+
+function StrategyStep({
+  number,
+  label,
+  children,
+}: {
+  number: number;
+  label: string;
+  children: ReactNode;
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="flex flex-col items-center pt-1">
+        <div className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full bg-secondary font-mono text-xs font-semibold text-secondary-foreground">
+          {number}
+        </div>
+        <div className="mt-1 w-px flex-1 bg-border" />
+      </div>
+      <div className="min-w-0 flex-1 pb-2">
+        <p className="mb-2 text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          {label}
+        </p>
+        {children}
+      </div>
     </div>
   );
 }

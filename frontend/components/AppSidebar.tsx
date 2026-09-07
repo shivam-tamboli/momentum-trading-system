@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, LineChart, LogOut, TrendingUp, Activity, Settings } from 'lucide-react';
+import { LayoutDashboard, LineChart, LogOut, Activity, Settings } from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -30,9 +30,16 @@ export function AppSidebarContent() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2 px-4 py-5">
-        <TrendingUp className="h-6 w-6 text-primary" />
-        <span className="text-sm font-semibold">Momentum Trading</span>
+      <div className="flex items-center gap-2.5 px-4 py-5">
+        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-sm font-bold text-primary-foreground">
+          M
+        </div>
+        <div className="flex flex-col leading-none">
+          <span className="text-sm font-semibold">Momentum</span>
+          <span className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+            Trading Terminal
+          </span>
+        </div>
       </div>
 
       <Separator />

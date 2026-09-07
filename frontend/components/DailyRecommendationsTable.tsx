@@ -6,8 +6,8 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
-import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { cn } from '@/lib/utils';
 import type { DailyRecommendationItem } from '@/lib/types';
 
 interface DailyRecommendationsTableProps {
@@ -74,17 +74,26 @@ export function DailyRecommendationsTable({
           )}
 
           {!isLoading &&
-            recommendations?.map((rec) => (
-              <TableRow key={rec.symbol}>
-                <TableCell className="font-medium">{rec.symbol}</TableCell>
-                <TableCell className="text-muted-foreground">{rec.name}</TableCell>
-                <TableCell>
-                  <Badge variant="secondary" className="font-mono">
-                    {rec.momentum_score.toFixed(4)}
-                  </Badge>
-                </TableCell>
-              </TableRow>
-            ))}
+            recommendations?.map((rec) => {
+              const isPositive = rec.momentum_score >= 0;
+              return (
+                <TableRow key={rec.symbol}>
+                  <TableCell className="font-medium">{rec.symbol}</TableCell>
+                  <TableCell className="text-muted-foreground">{rec.name}</TableCell>
+                  <TableCell>
+                    <span
+                      className={cn(
+                        'font-mono text-sm font-semibold tabular-nums',
+                        isPositive ? 'text-gain' : 'text-loss'
+                      )}
+                    >
+                      {isPositive ? '▲ ' : '▼ '}
+                      {rec.momentum_score.toFixed(4)}
+                    </span>
+                  </TableCell>
+                </TableRow>
+              );
+            })}
         </TableBody>
       </Table>
     </div>

@@ -11,15 +11,15 @@ import type { AlgorithmStats, MetricsResponse } from '@/lib/types';
 const REFRESH_INTERVAL_MS = 30000;
 
 const HEALTH_STYLES: Record<string, string> = {
-  UP: 'bg-green-600 text-white hover:bg-green-600',
-  DOWN: 'bg-red-600 text-white hover:bg-red-600',
+  UP: 'bg-gain text-gain-foreground hover:bg-gain',
+  DOWN: 'bg-loss text-loss-foreground hover:bg-loss',
 };
 
 const ALGORITHM_STATUS_STYLES: Record<AlgorithmStats['status'], string> = {
   NEVER_RUN: 'bg-muted text-muted-foreground hover:bg-muted',
-  RUNNING: 'bg-amber-500 text-white hover:bg-amber-500',
-  SUCCESS: 'bg-green-600 text-white hover:bg-green-600',
-  FAILED: 'bg-red-600 text-white hover:bg-red-600',
+  RUNNING: 'bg-pending text-pending-foreground hover:bg-pending',
+  SUCCESS: 'bg-gain text-gain-foreground hover:bg-gain',
+  FAILED: 'bg-loss text-loss-foreground hover:bg-loss',
 };
 
 function StatCard({
@@ -37,7 +37,11 @@ function StatCard({
         <CardTitle className="text-sm font-medium text-muted-foreground">{label}</CardTitle>
       </CardHeader>
       <CardContent>
-        {isLoading ? <Skeleton className="h-8 w-24" /> : <p className="text-2xl font-bold">{value}</p>}
+        {isLoading ? (
+          <Skeleton className="h-8 w-24" />
+        ) : (
+          <p className="font-mono text-2xl font-bold tabular-nums">{value}</p>
+        )}
       </CardContent>
     </Card>
   );
@@ -124,7 +128,7 @@ export default function AdminMetricsPage() {
           />
         </div>
         {metrics?.algorithm.status === 'FAILED' && metrics.algorithm.last_error && (
-          <p className="mt-3 text-sm text-red-600">Last error: {metrics.algorithm.last_error}</p>
+          <p className="mt-3 text-sm text-loss">Last error: {metrics.algorithm.last_error}</p>
         )}
       </div>
 

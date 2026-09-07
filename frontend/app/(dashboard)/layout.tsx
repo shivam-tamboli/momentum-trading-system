@@ -59,7 +59,12 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
               <AppSidebarContent />
             </SheetContent>
           </Sheet>
-          <span className="text-sm font-semibold">Momentum Trading</span>
+          <div className="flex items-center gap-2">
+            <div className="flex h-7 w-7 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-xs font-bold text-primary-foreground">
+              M
+            </div>
+            <span className="text-sm font-semibold">Momentum</span>
+          </div>
         </header>
 
         <main className="flex-1 overflow-y-auto p-4 md:p-8">{children}</main>

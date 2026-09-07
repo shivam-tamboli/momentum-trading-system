@@ -47,11 +47,24 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <Card className="w-full max-w-sm">
-        <CardHeader>
-          <CardTitle>Momentum Trading System</CardTitle>
-          <CardDescription>Sign in to view your recommendations and trades.</CardDescription>
-        </CardHeader>
+      <div className="w-full max-w-sm space-y-6">
+        <div className="flex flex-col items-center gap-3 text-center">
+          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary font-mono text-lg font-bold text-primary-foreground">
+            M
+          </div>
+          <div>
+            <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
+              Paper Trading Terminal
+            </p>
+            <h1 className="mt-1 text-xl font-semibold">Momentum</h1>
+          </div>
+        </div>
+
+        <Card className="w-full">
+          <CardHeader>
+            <CardTitle>Sign in</CardTitle>
+            <CardDescription>View your recommendations and trades.</CardDescription>
+          </CardHeader>
         <CardContent>
           <form onSubmit={handleSubmit} className="space-y-4">
             <div className="space-y-2">
@@ -90,8 +103,9 @@ export default function LoginPage() {
               {isSubmitting ? 'Signing in…' : 'Sign in'}
             </Button>
           </form>
-        </CardContent>
-      </Card>
+          </CardContent>
+        </Card>
+      </div>
     </div>
   );
 }

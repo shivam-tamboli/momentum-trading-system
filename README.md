@@ -117,9 +117,11 @@ Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/ad
 | GET | `/:userId/account` | Live cash, buying power, portfolio value |
 | GET | `/:userId/positions` | Live positions from Alpaca |
 | GET | `/:userId/daily-trades` | This user's trade history |
-| GET | `/admin/metrics` | Health, last scoring run, trade counts |
+| GET | `/metrics` | Health, last scoring run, trade counts |
 | POST | `/admin/run-daily-scoring` | Manually trigger Job 1 |
 | POST | `/admin/run-daily-trading` | Manually trigger Job 2 |
+
+`/metrics` is read-only and JWT-authenticated like everything else — it used to live under `/admin/`, but the frontend has no secure place to hold `X-Admin-Key` (anything shipped in client JS is readable by anyone via devtools), so that key stays reserved for the two routes that actually place orders.
 
 Every `:userId` route checks that the caller's token actually belongs to that user. That wasn't always true — see below.
 
@@ -238,13 +240,16 @@ To set it up, add `ADMIN_SECRET_KEY` as a repository secret:
 4. Value: the same value set as the backend's `ADMIN_SECRET_KEY` environment variable on Render
 5. Save
 
-**2. Keep-alive (UptimeRobot)**
+**2. Keep-alive (GitHub Actions)**
 
-This keeps the server warm generally, not just during the two cron windows — which also lets the backend's own in-process scheduler work as a redundant backup path, in case GitHub Actions is ever delayed or down.
+`.github/workflows/keep-alive.yml` pings the backend every 5 minutes, 24/7/365, so it never idles long enough for Render to spin it down at all — not just during the two cron windows. This also lets the backend's own in-process scheduler work as a redundant backup path, since it can only tick while the process is actually awake. Failures are silent by design (a missed ping just means the next one fires in 5 minutes) — this isn't meant to page anyone, unlike the trading cron above.
 
-1. Go to [uptimerobot.com](https://uptimerobot.com) and create a free account
-2. Click **Add New Monitor**
-3. Monitor type: **HTTP(s)**
-4. URL: the Render backend URL (e.g. `https://momentum-trading-backend.onrender.com`)
-5. Monitoring interval: **every 5 minutes**
-6. Save
+To set it up, add `BACKEND_URL` as a repository secret the same way as `ADMIN_SECRET_KEY`:
+
+1. Go to the repo on GitHub → **Settings** → **Secrets and variables** → **Actions**
+2. Click **New repository secret**
+3. Name: `BACKEND_URL`
+4. Value: the Render backend URL (e.g. `https://momentum-trading-backend.onrender.com`)
+5. Save
+
+**Alternative — UptimeRobot.** If you'd rather not rely on GitHub Actions' scheduling for this, [uptimerobot.com](https://uptimerobot.com) offers the same 5-minute HTTP ping as a free hosted service: create an account, **Add New Monitor**, type **HTTP(s)**, paste the backend URL, set the interval to 5 minutes, save.

@@ -8,22 +8,13 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { formatRelativeDate, formatScoredAt, isStale } from '@/lib/freshness';
 import type { DailyRecommendationItem } from '@/lib/types';
 
 interface DailyRecommendationsTableProps {
   recommendations: DailyRecommendationItem[] | undefined;
   isLoading: boolean;
 }
-
-function isStale(scoredAt: string): boolean {
-  return new Date(scoredAt).toDateString() !== new Date().toDateString();
-}
-
-const dateFormatter = new Intl.DateTimeFormat('en-US', {
-  month: 'long',
-  day: 'numeric',
-  year: 'numeric',
-});
 
 export function DailyRecommendationsTable({
   recommendations,
@@ -38,10 +29,16 @@ export function DailyRecommendationsTable({
 
   return (
     <div className="space-y-3">
+      {!isLoading && scoredAt && (
+        <p className="font-mono text-xs text-muted-foreground tabular-nums">
+          Last scored: {formatScoredAt(scoredAt)}
+        </p>
+      )}
+
       {!isLoading && stale && scoredAt && (
-        <p className="rounded-md border border-destructive/50 bg-destructive/10 px-3 py-2 text-sm font-medium text-destructive">
-          ⚠️ Recommendations are from {dateFormatter.format(new Date(scoredAt))}. Today&apos;s
-          scoring did not complete. No trades will execute today.
+        <p className="rounded-md border border-pending/50 bg-pending/10 px-3 py-2 text-sm font-medium text-pending">
+          ⚠️ Recommendations are from {formatRelativeDate(scoredAt)}. Today&apos;s scoring did
+          not complete. No trades will execute today.
         </p>
       )}
 

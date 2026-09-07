@@ -5,6 +5,7 @@ import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { AccountSummary } from '@/components/AccountSummary';
 import { AccountActivityChart } from '@/components/AccountActivityChart';
+import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
@@ -59,6 +60,13 @@ export default function DashboardPage() {
       <h1 className="text-2xl font-bold">Dashboard</h1>
 
       <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
+
+      {selectedIndex && (
+        <AlgorithmStatusCard
+          recommendations={dailyRecommendationsQuery.data}
+          isLoading={dailyRecommendationsQuery.isLoading}
+        />
+      )}
 
       <Card>
         <CardHeader>

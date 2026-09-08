@@ -2,6 +2,7 @@ package com.momentum.controller;
 
 import com.momentum.service.DailyScoringService;
 import com.momentum.service.DailyTradingService;
+import com.momentum.service.TradeReconciliationService;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -13,11 +14,14 @@ public class AdminController {
 
     private final DailyScoringService dailyScoringService;
     private final DailyTradingService dailyTradingService;
+    private final TradeReconciliationService tradeReconciliationService;
 
     public AdminController(DailyScoringService dailyScoringService,
-                            DailyTradingService dailyTradingService) {
+                            DailyTradingService dailyTradingService,
+                            TradeReconciliationService tradeReconciliationService) {
         this.dailyScoringService = dailyScoringService;
         this.dailyTradingService = dailyTradingService;
+        this.tradeReconciliationService = tradeReconciliationService;
     }
 
     // Manual triggers for development/testing of the daily engine — the scheduler and the
@@ -41,6 +45,16 @@ public class AdminController {
             return ResponseEntity.ok("Daily trading run completed.");
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Daily trading failed: " + e.getMessage());
+        }
+    }
+
+    @PostMapping("/reconcile-pending-trades")
+    public ResponseEntity<String> reconcilePendingTrades() {
+        try {
+            tradeReconciliationService.reconcilePendingTrades();
+            return ResponseEntity.ok("Trade reconciliation completed.");
+        } catch (Exception e) {
+            return ResponseEntity.status(500).body("Trade reconciliation failed: " + e.getMessage());
         }
     }
 }

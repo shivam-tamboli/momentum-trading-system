@@ -3,8 +3,10 @@ name: Daily trading cron
 # External backup for the backend's own in-process scheduler. Render's free tier spins the web
 # service down after ~15 minutes idle, and the in-process scheduler is a @Scheduled poller that
 # can only tick while the JVM is awake — so a whole day's window can pass with nobody home. This
-# workflow calls the same two admin endpoints directly, on a schedule GitHub runs regardless of
+# workflow calls the same admin endpoints directly, on a schedule GitHub runs regardless of
 # whether the backend process itself is currently alive (the HTTP call to Render wakes it if not).
+#
+# Three jobs: score before open, trade at open, reconcile any trades still PENDING after close.
 
 on:
   schedule:
@@ -12,6 +14,8 @@ on:
     - cron: "30 10 * * 1-5"
     # 13:30 UTC = 9:30 AM ET — market open. Job 2: trade.
     - cron: "30 13 * * 1-5"
+    # 21:00 UTC = 4-5 PM ET — after market close. Job 3: reconcile PENDING trades.
+    - cron: "0 21 * * 1-5"
   workflow_dispatch:
     inputs:
       job:
@@ -21,6 +25,7 @@ on:
           - both
           - scoring
           - trading
+          - reconcile
         default: both
 
 env:
@@ -51,6 +56,20 @@ jobs:
         run: |
           curl --fail --show-error --silent --max-time 300 \
             -X POST "$BACKEND_URL/admin/run-daily-trading" \
+            -H "X-Admin-Key: $ADMIN_SECRET_KEY"
+        env:
+          ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}
+
+  reconcile-pending-trades:
+    if: >
+      github.event.schedule == '0 21 * * 1-5' ||
+      (github.event_name == 'workflow_dispatch' && github.event.inputs.job == 'reconcile')
+    runs-on: ubuntu-latest
+    steps:
+      - name: POST /admin/reconcile-pending-trades
+        run: |
+          curl --fail --show-error --silent --max-time 300 \
+            -X POST "$BACKEND_URL/admin/reconcile-pending-trades" \
             -H "X-Admin-Key: $ADMIN_SECRET_KEY"
         env:
           ADMIN_SECRET_KEY: ${{ secrets.ADMIN_SECRET_KEY }}

@@ -52,8 +52,11 @@ public class DailyTrade {
     // FILLED: order confirmed filled, all fields below are real fill data.
     // PENDING: order was accepted by Alpaca but didn't confirm a fill within the wait window —
     //          fields below hold whatever was actually known at that point (never a fabricated
-    //          $0 / 0-share "fill").
-    // FAILED: the order was never successfully placed at all.
+    //          $0 / 0-share "fill"). TradeReconciliationService resolves these to FILLED/FAILED
+    //          once daily, once Alpaca's own record of the order reaches a real terminal state.
+    // FAILED: either the order was never successfully placed at all, or it was placed but later
+    //         canceled/expired/rejected — discovered via daily reconciliation, since a PENDING
+    //         order isn't necessarily still open by the time anyone checks it again.
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TradeStatus status;

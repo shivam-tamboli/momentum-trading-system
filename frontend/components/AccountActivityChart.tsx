@@ -10,6 +10,20 @@ interface AccountActivityChartProps {
   isLoading: boolean;
 }
 
+// lightweight-charts renders to a plain <canvas> 2D context, which does not accept oklch() color
+// strings — unlike Tailwind classes, which get compiled down to hex/lab fallbacks at build time,
+// these are passed straight to the charting library's JS API and never go through that
+// compilation. Hex values below are the exact ones already live in the deployed CSS for
+// --muted-foreground and --primary in dark mode (verified against the real compiled bundle, not
+// just computed from scratch), so the chart matches the rest of the app's palette exactly.
+const CHART_COLORS = {
+  mutedForeground: '#a1a1a1',
+  gridLine: 'rgba(255, 255, 255, 0.06)',
+  accent: '#3080ff',
+  accentFillTop: 'rgba(48, 128, 255, 0.35)',
+  accentFillBottom: 'rgba(48, 128, 255, 0)',
+} as const;
+
 // There's no backend endpoint that snapshots portfolio value over time, and a buy/sell doesn't
 // change total account value at the moment it fills (cash converts to an equal-value position,
 // or back) — so trade records can't be used to reconstruct a historical portfolio-value line
@@ -46,25 +60,25 @@ export function AccountActivityChart({ trades, isLoading }: AccountActivityChart
       const chart = createChart(containerRef.current, {
         layout: {
           background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: 'oklch(0.708 0 0)',
+          textColor: CHART_COLORS.mutedForeground,
           fontFamily: 'var(--font-geist-mono)',
           fontSize: 11,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { color: 'oklch(1 0 0 / 6%)' },
+          horzLines: { color: CHART_COLORS.gridLine },
         },
         rightPriceScale: { borderVisible: false },
         timeScale: { borderVisible: false },
-        crosshair: { vertLine: { labelBackgroundColor: 'oklch(0.623 0.214 259.815)' } },
+        crosshair: { vertLine: { labelBackgroundColor: CHART_COLORS.accent } },
         height: 220,
         autoSize: true,
       });
 
       const series = chart.addSeries(AreaSeries, {
-        lineColor: 'oklch(0.623 0.214 259.815)',
-        topColor: 'oklch(0.623 0.214 259.815 / 35%)',
-        bottomColor: 'oklch(0.623 0.214 259.815 / 0%)',
+        lineColor: CHART_COLORS.accent,
+        topColor: CHART_COLORS.accentFillTop,
+        bottomColor: CHART_COLORS.accentFillBottom,
         lineWidth: 2,
         priceFormat: { type: 'custom', formatter: (v: number) => `$${v.toLocaleString()}` },
       });

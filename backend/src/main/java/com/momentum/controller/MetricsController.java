@@ -1,6 +1,8 @@
 package com.momentum.controller;
 
+import com.momentum.model.DailyRecommendation;
 import com.momentum.model.enums.ActionType;
+import com.momentum.model.enums.AlgorithmRunStatus;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.repository.DailyTradeRepository;
 import com.momentum.service.IndexConstituentService;
@@ -11,6 +13,7 @@ import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
 import java.util.HashSet;
+import java.util.Optional;
 import java.util.Set;
 
 // Unlike /admin/**, this is a plain Supabase-JWT-authenticated endpoint (SecurityConfig's
@@ -67,18 +70,47 @@ public class MetricsController {
 
         MetricsResponse response = new MetricsResponse(
                 new HealthStatus(dbStatus),
-                new AlgorithmStats(
-                        metricsService.getAlgorithmStatus().name(),
-                        metricsService.getLastRunAt(),
-                        metricsService.getLastRunDurationMs(),
-                        metricsService.getLastRunStocksScored(),
-                        metricsService.getLastRunError()
-                ),
+                buildAlgorithmStats(),
                 new TradingStats(totalTrades, buyCount, sellCount),
                 new DatabaseStats(universeSize, recommendationCount)
         );
 
         return ResponseEntity.ok(response);
+    }
+
+    // MetricsService is in-memory only — a live process's own view of "did I just run this?" is
+    // real and worth trusting when it has one. But Render restarts freely on the free tier (and
+    // more often than the keep-alive job can reliably prevent — see the daily-trading-cron and
+    // keep-alive workflows), and every restart wipes that state back to NEVER_RUN even though a
+    // previous process instance genuinely scored successfully. When this instance has nothing to
+    // report, fall back to the one thing that's actually persisted: the most recent
+    // daily_recommendation row's scored_at. duration_ms and stocks_scored have no DB equivalent
+    // (they were never designed to be persisted) and stay null in the fallback case.
+    private AlgorithmStats buildAlgorithmStats() {
+        AlgorithmRunStatus liveStatus = metricsService.getAlgorithmStatus();
+
+        if (liveStatus != AlgorithmRunStatus.NEVER_RUN) {
+            return new AlgorithmStats(
+                    liveStatus.name(),
+                    metricsService.getLastRunAt(),
+                    metricsService.getLastRunDurationMs(),
+                    metricsService.getLastRunStocksScored(),
+                    metricsService.getLastRunError()
+            );
+        }
+
+        Optional<DailyRecommendation> mostRecent = dailyRecommendationRepository.findTopByOrderByScoredAtDesc();
+        if (mostRecent.isEmpty()) {
+            return new AlgorithmStats(liveStatus.name(), null, null, null, null);
+        }
+
+        return new AlgorithmStats(
+                AlgorithmRunStatus.SUCCESS.name(),
+                mostRecent.get().getScoredAt(),
+                null,
+                null,
+                null
+        );
     }
 
     public record HealthStatus(String status) {

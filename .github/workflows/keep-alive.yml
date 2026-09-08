@@ -16,6 +16,9 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend
-        run: curl --silent --max-time 30 "$BACKEND_URL" || true
+        # Render free-tier cold starts measured at 56-100s live — 30s was too tight and could
+        # time out before ever actually waking the server, while still reporting success via the
+        # `|| true`. 120s covers the measured range with margin.
+        run: curl --silent --max-time 120 "$BACKEND_URL" || true
         env:
           BACKEND_URL: ${{ secrets.BACKEND_URL }}

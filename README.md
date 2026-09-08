@@ -240,9 +240,11 @@ To set it up, add `ADMIN_SECRET_KEY` as a repository secret:
 4. Value: the same value set as the backend's `ADMIN_SECRET_KEY` environment variable on Render
 5. Save
 
-**2. Keep-alive (GitHub Actions)**
+**2. Keep-alive (GitHub Actions) — has a known reliability gap**
 
-`.github/workflows/keep-alive.yml` pings the backend every 5 minutes, 24/7/365, so it never idles long enough for Render to spin it down at all — not just during the two cron windows. This also lets the backend's own in-process scheduler work as a redundant backup path, since it can only tick while the process is actually awake. Failures are silent by design (a missed ping just means the next one fires in 5 minutes) — this isn't meant to page anyone, unlike the trading cron above.
+`.github/workflows/keep-alive.yml` is *configured* to ping the backend every 5 minutes, 24/7/365. In practice, measured against the real run history, it doesn't actually fire every 5 minutes — gaps of 2-5 hours between runs are normal. This is GitHub's own platform behavior, not a bug in this workflow: GitHub explicitly deprioritizes high-frequency (`*/5`) scheduled workflows on repos without constant Actions activity, and there's no config on our side that fixes it. Treat this workflow as "helps sometimes," not "guarantees the server stays warm" — **UptimeRobot below is the actually-reliable option** if you need real 5-minute pings.
+
+This also lets the backend's own in-process scheduler work as a redundant backup path when it does fire, since that scheduler can only tick while the process is actually awake. Failures are silent by design (a missed ping just means the next one fires whenever GitHub actually runs it) — this isn't meant to page anyone, unlike the trading cron above.
 
 To set it up, add `BACKEND_URL` as a repository secret the same way as `ADMIN_SECRET_KEY`:
 

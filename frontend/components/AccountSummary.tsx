@@ -48,23 +48,23 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
           {isLoading || account?.portfolio_value === undefined ? (
             <Skeleton className="h-12 w-48" />
           ) : (
-            <div className="space-y-1">
-              <p className="font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
                 {currency.format(animatedPortfolioValue ?? account.portfolio_value)}
-              </p>
+              </span>
               {hasDelta && (
-                <p
+                <span
                   className={cn(
-                    'font-mono text-sm font-semibold tabular-nums',
+                    'font-mono text-lg font-semibold tabular-nums sm:text-xl',
                     isPositiveDelta ? 'text-gain' : 'text-loss'
                   )}
                 >
-                  {isPositiveDelta ? '▲ ' : '▼ '}
-                  {currency.format(Math.abs(dayDelta))} ({percent.format(Math.abs(dayDeltaPercent))})
-                  <span className="ml-1 font-sans font-normal text-muted-foreground">today</span>
-                </p>
+                  ({isPositiveDelta ? '+' : '−'}
+                  {currency.format(Math.abs(dayDelta))} · {isPositiveDelta ? '+' : '−'}
+                  {percent.format(Math.abs(dayDeltaPercent))} today)
+                </span>
               )}
-            </div>
+            </p>
           )}
         </CardContent>
       </Card>

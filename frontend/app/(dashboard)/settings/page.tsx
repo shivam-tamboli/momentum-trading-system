@@ -369,9 +369,21 @@ function IndexPickerCard({
               Switch to {pendingIndex ? INDEX_LABELS[pendingIndex] : ''}?
             </AlertDialogTitle>
             <AlertDialogDescription>
-              This sells everything you currently hold, then buys{' '}
-              {pendingIndex ? INDEX_LABELS[pendingIndex] : 'the new index'}&apos;s top 5. This
-              happens immediately if the market is open.
+              {selectedIndex ? (
+                <>
+                  Switching to {pendingIndex ? INDEX_LABELS[pendingIndex] : ''} will sell all
+                  your current {INDEX_LABELS[selectedIndex as SelectableIndex] ?? selectedIndex}{' '}
+                  holdings and buy the top 5 {pendingIndex ? INDEX_LABELS[pendingIndex] : ''}{' '}
+                  stocks —
+                </>
+              ) : (
+                <>
+                  This will buy the top 5 {pendingIndex ? INDEX_LABELS[pendingIndex] : ''}{' '}
+                  stocks —
+                </>
+              )}{' '}
+              immediately if the market is open right now, or at the next market open otherwise.
+              Are you sure?
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -387,7 +399,7 @@ function IndexPickerCard({
               disabled={mutation.isPending}
               onClick={() => pendingIndex && mutation.mutate(pendingIndex)}
             >
-              {mutation.isPending ? 'Switching…' : 'Confirm switch'}
+              {mutation.isPending ? 'Switching…' : 'Confirm'}
             </Button>
           </AlertDialogFooter>
         </AlertDialogContent>

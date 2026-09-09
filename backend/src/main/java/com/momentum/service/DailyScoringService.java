@@ -209,9 +209,10 @@ public class DailyScoringService {
                 }
 
                 try {
-                    BigDecimal score = calculateMomentumScore(bars);
-                    if (score != null) {
-                        results.add(new ScoredStock(entry.getKey(), score));
+                    MomentumComponents components = calculateMomentumScore(bars);
+                    if (components != null) {
+                        results.add(new ScoredStock(entry.getKey(), components.ret6m(), components.ret3m(),
+                                components.ret1m(), components.vol3m(), components.score()));
                     }
                 } catch (Exception e) {
                     log.warn("Skipping stock {}: {}", entry.getKey(), e.getMessage());
@@ -264,7 +265,7 @@ public class DailyScoringService {
         return allBars;
     }
 
-    private BigDecimal calculateMomentumScore(List<StockBar> bars) {
+    private MomentumComponents calculateMomentumScore(List<StockBar> bars) {
         if (bars == null || bars.size() < 2) {
             return null;
         }
@@ -279,11 +280,22 @@ public class DailyScoringService {
         BigDecimal ret1m = calculateReturn(latestPrice, price1mAgo);
         BigDecimal vol3m = calculateVolatility3m(bars);
 
-        return ret6m.multiply(new BigDecimal("0.5"))
+        BigDecimal score = ret6m.multiply(new BigDecimal("0.5"))
                 .add(ret3m.multiply(new BigDecimal("0.3")))
                 .add(ret1m.multiply(new BigDecimal("0.2")))
                 .subtract(vol3m.multiply(new BigDecimal("0.1")))
                 .setScale(6, RoundingMode.HALF_UP);
+
+        // Rounded only for display/storage — score above is computed from the full-precision
+        // values, never from these rounded ones, so persisting the breakdown can't introduce
+        // drift into the ranking math itself (hand-verified against raw Alpaca data elsewhere).
+        return new MomentumComponents(
+                ret6m.setScale(6, RoundingMode.HALF_UP),
+                ret3m.setScale(6, RoundingMode.HALF_UP),
+                ret1m.setScale(6, RoundingMode.HALF_UP),
+                vol3m.setScale(6, RoundingMode.HALF_UP),
+                score
+        );
     }
 
     private BigDecimal calculateReturn(BigDecimal latestPrice, BigDecimal pastPrice) {
@@ -359,11 +371,17 @@ public class DailyScoringService {
                 .sorted(Comparator.comparing(ScoredStock::score).reversed())
                 .limit(TOP_N)
                 .map(s -> new DailyRecommendation(null, filterName, s.symbol(),
-                        namesBySymbol.getOrDefault(s.symbol(), s.symbol()), s.score(), null))
+                        namesBySymbol.getOrDefault(s.symbol(), s.symbol()), s.score(),
+                        s.ret6m(), s.ret3m(), s.ret1m(), s.vol3m(), null))
                 .collect(Collectors.toList());
     }
 
-    private record ScoredStock(String symbol, BigDecimal score) {
+    private record ScoredStock(String symbol, BigDecimal ret6m, BigDecimal ret3m, BigDecimal ret1m,
+                                BigDecimal vol3m, BigDecimal score) {
+    }
+
+    private record MomentumComponents(BigDecimal ret6m, BigDecimal ret3m, BigDecimal ret1m,
+                                       BigDecimal vol3m, BigDecimal score) {
     }
 
     private record BatchResult(List<ScoredStock> scored, int skippedForHistory) {

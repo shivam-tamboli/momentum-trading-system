@@ -6,6 +6,7 @@ import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { AccountSummary } from '@/components/AccountSummary';
 import { PortfolioComposition } from '@/components/PortfolioComposition';
+import { BenchmarkComparison } from '@/components/BenchmarkComparison';
 import { IndexPriceChart } from '@/components/IndexPriceChart';
 import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
@@ -14,6 +15,7 @@ import { TradeHistoryTable } from '@/components/TradeHistoryTable';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type {
   AccountResponse,
+  BenchmarkResponse,
   DailyRecommendationItem,
   DailyTradeItem,
   IndexPriceHistoryResponse,
@@ -82,6 +84,15 @@ export default function DashboardPage() {
     enabled: selectedIndex !== null,
   });
 
+  const benchmarkQuery = useQuery({
+    queryKey: ['benchmark', userId],
+    queryFn: async () => {
+      const { data } = await api.get<BenchmarkResponse>(`/${userId}/benchmark`);
+      return data;
+    },
+    enabled: userId !== null && hasAlpacaKey,
+  });
+
   const heldSymbols = new Set(positionsQuery.data?.map((p) => p.symbol));
 
   if (isUserLoading || userId === null) {
@@ -111,6 +122,16 @@ export default function DashboardPage() {
       )}
 
       <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Benchmark Comparison</CardTitle>
+          <CardDescription>How your portfolio has performed against your tracked index.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <BenchmarkComparison benchmark={benchmarkQuery.data} isLoading={benchmarkQuery.isLoading} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

@@ -51,6 +51,17 @@ public class IndexConstituentService {
     public static final String SP400 = "S&P 400";
     public static final String SP600 = "S&P 600";
 
+    // Each selectable index is tracked via its most liquid, widely-used ETF — real, tradable
+    // proxies for the index itself, since Alpaca's market data endpoint serves equities/ETFs, not
+    // raw index values. No entry for FULL_MARKET: there's no single ETF proxy for "the entire US
+    // market" in the same sense, so it's deliberately absent rather than mapped to a guess.
+    public static final Map<String, String> INDEX_TO_ETF = Map.of(
+            SP500, "SPY",
+            SP400, "MDY",
+            SP600, "SPSM",
+            NASDAQ100, "QQQ"
+    );
+
     private volatile Map<String, Set<String>> constituentsByIndex = Map.of();
 
     @EventListener(ApplicationReadyEvent.class)

@@ -24,23 +24,27 @@ interface PositionsTableProps {
   isLoading: boolean;
 }
 
+const COLUMN_COUNT = 7;
+
 export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
   return (
     <Table>
       <TableHeader>
         <TableRow>
           <TableHead>Symbol</TableHead>
-          <TableHead className="text-right">Quantity</TableHead>
-          <TableHead className="text-right">Avg Entry</TableHead>
+          <TableHead>Name</TableHead>
           <TableHead className="text-right">Current Price</TableHead>
+          <TableHead className="text-right">Quantity</TableHead>
+          <TableHead className="text-right">Market Value</TableHead>
           <TableHead className="text-right">Unrealized P&amp;L</TableHead>
+          <TableHead className="text-right">Avg Entry</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>
         {isLoading &&
           Array.from({ length: 5 }).map((_, i) => (
             <TableRow key={i}>
-              {Array.from({ length: 5 }).map((__, j) => (
+              {Array.from({ length: COLUMN_COUNT }).map((__, j) => (
                 <TableCell key={j}>
                   <Skeleton className="h-4 w-full" />
                 </TableCell>
@@ -50,7 +54,7 @@ export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
 
         {!isLoading && (!positions || positions.length === 0) && (
           <TableRow>
-            <TableCell colSpan={5}>
+            <TableCell colSpan={COLUMN_COUNT}>
               <EmptyState icon={Briefcase} message="No open positions." />
             </TableCell>
           </TableRow>
@@ -62,14 +66,15 @@ export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
             return (
               <TableRow key={position.symbol}>
                 <TableCell className="font-medium">{position.symbol}</TableCell>
+                <TableCell className="text-muted-foreground">{position.name}</TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {currency.format(position.current_price)}
+                </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {position.qty}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {currency.format(position.avg_entry_price)}
-                </TableCell>
-                <TableCell className="text-right font-mono tabular-nums">
-                  {currency.format(position.current_price)}
+                  {currency.format(position.market_value)}
                 </TableCell>
                 <TableCell
                   className={cn(
@@ -80,6 +85,9 @@ export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
                   {isPositive ? '▲ ' : '▼ '}
                   {currency.format(Math.abs(position.unrealized_pl))} (
                   {percent.format(Math.abs(position.unrealized_pl_percent))})
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {currency.format(position.avg_entry_price)}
                 </TableCell>
               </TableRow>
             );

@@ -7,6 +7,7 @@ import com.momentum.service.UserAuthorizationService;
 import com.momentum.util.EncryptionUtil;
 import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.account.Account;
+import net.jacobpeterson.alpaca.model.endpoint.assets.Asset;
 import net.jacobpeterson.alpaca.model.endpoint.positions.Position;
 import net.jacobpeterson.alpaca.rest.AlpacaClientException;
 import org.springframework.http.HttpStatus;
@@ -88,12 +89,18 @@ public class AccountController {
         try {
             List<Position> positions = userAlpacaAPI.positions().get();
 
-            List<PositionResponse> response = positions.stream()
+            // Alpaca's Position model has no company name field at all, only the symbol — a
+            // separate lookup is the only way to get it. The daily engine only ever holds up to
+            // 5 positions (top-5-per-index design), so this is a small, bounded number of extra
+            // calls, done in parallel rather than serially.
+            List<PositionResponse> response = positions.parallelStream()
                     .map(position -> new PositionResponse(
                             position.getSymbol(),
+                            fetchCompanyName(userAlpacaAPI, position.getSymbol()),
                             new BigDecimal(position.getQuantity()),
                             new BigDecimal(position.getAverageEntryPrice()),
                             new BigDecimal(position.getCurrentPrice()),
+                            new BigDecimal(position.getMarketValue()),
                             new BigDecimal(position.getUnrealizedProfitLoss()),
                             new BigDecimal(position.getUnrealizedProfitLossPercent())
                     ))
@@ -103,6 +110,17 @@ public class AccountController {
         } catch (AlpacaClientException e) {
             return ResponseEntity.status(HttpStatus.BAD_GATEWAY)
                     .body(new ErrorResponse("Failed to fetch positions from Alpaca: " + e.getMessage()));
+        }
+    }
+
+    // Best-effort — a failed name lookup for one symbol falls back to the symbol itself rather
+    // than failing the whole positions response over a non-essential display detail.
+    private String fetchCompanyName(AlpacaAPI alpacaAPI, String symbol) {
+        try {
+            Asset asset = alpacaAPI.assets().getBySymbol(symbol);
+            return (asset != null && asset.getName() != null) ? asset.getName() : symbol;
+        } catch (Exception e) {
+            return symbol;
         }
     }
 
@@ -116,8 +134,8 @@ public class AccountController {
                                    BigDecimal lastEquity) {
     }
 
-    public record PositionResponse(String symbol, BigDecimal qty, BigDecimal avgEntryPrice,
-                                    BigDecimal currentPrice, BigDecimal unrealizedPl,
+    public record PositionResponse(String symbol, String name, BigDecimal qty, BigDecimal avgEntryPrice,
+                                    BigDecimal currentPrice, BigDecimal marketValue, BigDecimal unrealizedPl,
                                     BigDecimal unrealizedPlPercent) {
     }
 

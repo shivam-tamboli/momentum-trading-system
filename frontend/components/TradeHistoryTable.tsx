@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import { CheckCircle2, Clock, Receipt, XCircle } from 'lucide-react';
 import {
   Table,
@@ -45,25 +44,6 @@ function formatQuantity(value: number | null): string {
   return value === null ? '—' : String(value);
 }
 
-interface DayGroup {
-  day: string;
-  trades: DailyTradeItem[];
-}
-
-// Trades already arrive sorted by traded_at desc, so grouping preserves that order without
-// needing to re-sort — each day's trades stay together, most recent day first.
-function groupByDay(trades: DailyTradeItem[]): DayGroup[] {
-  const groups = new Map<string, DailyTradeItem[]>();
-  for (const trade of trades) {
-    const day = trade.traded_at.slice(0, 10);
-    if (!groups.has(day)) {
-      groups.set(day, []);
-    }
-    groups.get(day)!.push(trade);
-  }
-  return Array.from(groups.entries()).map(([day, dayTrades]) => ({ day, trades: dayTrades }));
-}
-
 function daySummary(trades: DailyTradeItem[]) {
   const buys = trades.filter((t) => t.action === 'BUY').length;
   const sells = trades.filter((t) => t.action === 'SELL').length;
@@ -76,13 +56,53 @@ function daySummary(trades: DailyTradeItem[]) {
   return { buys, sells, net };
 }
 
+type RenderItem =
+  | { type: 'day'; day: string; trades: DailyTradeItem[] }
+  | { type: 'switch'; from: string; to: string }
+  | { type: 'trade'; trade: DailyTradeItem };
+
+// Builds one flat list mixing day separators, index-switch markers, and trade rows — trades
+// arrive sorted traded_at desc (newest first), so walking forward through the array walks
+// backward through time. A switch marker appears between two consecutive trades whenever their
+// index_filter differs — "from" is the older trade's index, "to" is the newer one's, since that's
+// the direction the switch actually happened in.
+function buildRenderItems(trades: DailyTradeItem[]): RenderItem[] {
+  const items: RenderItem[] = [];
+  let currentDay: string | null = null;
+
+  for (let i = 0; i < trades.length; i++) {
+    const trade = trades[i];
+    const day = trade.traded_at.slice(0, 10);
+
+    if (day !== currentDay) {
+      const dayTrades = trades.filter((t) => t.traded_at.slice(0, 10) === day);
+      items.push({ type: 'day', day, trades: dayTrades });
+      currentDay = day;
+    }
+
+    items.push({ type: 'trade', trade });
+
+    const older = trades[i + 1];
+    if (
+      older &&
+      trade.index_filter !== null &&
+      older.index_filter !== null &&
+      trade.index_filter !== older.index_filter
+    ) {
+      items.push({ type: 'switch', from: older.index_filter, to: trade.index_filter });
+    }
+  }
+
+  return items;
+}
+
 interface TradeHistoryTableProps {
   trades: DailyTradeItem[] | undefined;
   isLoading: boolean;
 }
 
 export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps) {
-  const groups = trades ? groupByDay(trades) : [];
+  const items = trades ? buildRenderItems(trades) : [];
 
   return (
     <Table>
@@ -113,21 +133,24 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
         {!isLoading && (!trades || trades.length === 0) && (
           <TableRow>
             <TableCell colSpan={8}>
-              <EmptyState icon={Receipt} message="No trades yet." />
+              <EmptyState
+                icon={Receipt}
+                message="No trades yet. Your auto-trades will appear here after market open."
+              />
             </TableCell>
           </TableRow>
         )}
 
         {!isLoading &&
-          groups.map((group) => {
-            const { buys, sells, net } = daySummary(group.trades);
-            return (
-              <Fragment key={group.day}>
-                <TableRow className="hover:bg-transparent">
+          items.map((item, i) => {
+            if (item.type === 'day') {
+              const { buys, sells, net } = daySummary(item.trades);
+              return (
+                <TableRow key={`day-${item.day}`} className="hover:bg-transparent">
                   <TableCell colSpan={8} className="bg-muted/30 py-2">
                     <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
                       <span className="font-semibold text-foreground">
-                        {formatRelativeDate(group.trades[0].traded_at)}
+                        {formatRelativeDate(item.trades[0].traded_at)}
                       </span>
                       <span className="font-mono text-muted-foreground tabular-nums">
                         {buys} buy{buys === 1 ? '' : 's'}, {sells} sell{sells === 1 ? '' : 's'}
@@ -141,49 +164,60 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
                     </div>
                   </TableCell>
                 </TableRow>
+              );
+            }
 
-                {group.trades.map((trade, index) => {
-                  const StatusIcon = STATUS_ICONS[trade.status];
-                  return (
-                    <TableRow
-                      key={`${trade.symbol}-${trade.traded_at}-${index}`}
-                      className={cn(trade.status === 'PENDING' && 'bg-pending/10')}
-                    >
-                      <TableCell className="font-medium">{trade.symbol}</TableCell>
-                      <TableCell>
-                        {trade.index_filter ? (
-                          <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
-                            {trade.index_filter}
-                          </Badge>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={cn(ACTION_STYLES[trade.action])}>{trade.action}</Badge>
-                      </TableCell>
-                      <TableCell>
-                        <Badge className={cn('gap-1', STATUS_STYLES[trade.status])}>
-                          <StatusIcon className="h-3 w-3" />
-                          {trade.status === 'PENDING' ? 'Pending — still processing' : trade.status}
-                        </Badge>
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatCurrency(trade.amount)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatCurrency(trade.price_per_share)}
-                      </TableCell>
-                      <TableCell className="text-right font-mono tabular-nums">
-                        {formatQuantity(trade.quantity)}
-                      </TableCell>
-                      <TableCell className="font-mono text-muted-foreground tabular-nums">
-                        {formatDualTimezone(parseBackendTimestamp(trade.traded_at))}
-                      </TableCell>
-                    </TableRow>
-                  );
-                })}
-              </Fragment>
+            if (item.type === 'switch') {
+              return (
+                <TableRow key={`switch-${i}`} className="hover:bg-transparent">
+                  <TableCell colSpan={8} className="py-2 text-center">
+                    <span className="font-mono text-xs text-primary">
+                      ── Switched from {item.from} to {item.to} ──
+                    </span>
+                  </TableCell>
+                </TableRow>
+              );
+            }
+
+            const trade = item.trade;
+            const StatusIcon = STATUS_ICONS[trade.status];
+            return (
+              <TableRow
+                key={`${trade.symbol}-${trade.traded_at}-${i}`}
+                className={cn(trade.status === 'PENDING' && 'bg-pending/10')}
+              >
+                <TableCell className="font-medium">{trade.symbol}</TableCell>
+                <TableCell>
+                  {trade.index_filter ? (
+                    <Badge variant="outline" className="border-primary/30 bg-primary/10 text-primary">
+                      {trade.index_filter}
+                    </Badge>
+                  ) : (
+                    <span className="text-muted-foreground">—</span>
+                  )}
+                </TableCell>
+                <TableCell>
+                  <Badge className={cn(ACTION_STYLES[trade.action])}>{trade.action}</Badge>
+                </TableCell>
+                <TableCell>
+                  <Badge className={cn('gap-1', STATUS_STYLES[trade.status])}>
+                    <StatusIcon className="h-3 w-3" />
+                    {trade.status === 'PENDING' ? 'Pending — still processing' : trade.status}
+                  </Badge>
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatCurrency(trade.amount)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatCurrency(trade.price_per_share)}
+                </TableCell>
+                <TableCell className="text-right font-mono tabular-nums">
+                  {formatQuantity(trade.quantity)}
+                </TableCell>
+                <TableCell className="font-mono text-muted-foreground tabular-nums">
+                  {formatDualTimezone(parseBackendTimestamp(trade.traded_at))}
+                </TableCell>
+              </TableRow>
             );
           })}
       </TableBody>

@@ -1,3 +1,4 @@
+import { TrendingUp } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -7,6 +8,7 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
 import { formatRelativeDate, formatScoredAt, isStale } from '@/lib/freshness';
 import type { DailyRecommendationItem } from '@/lib/types';
@@ -64,8 +66,8 @@ export function DailyRecommendationsTable({
 
           {!isLoading && (!recommendations || recommendations.length === 0) && (
             <TableRow>
-              <TableCell colSpan={3} className="text-center text-muted-foreground">
-                No recommendations for today yet.
+              <TableCell colSpan={3}>
+                <EmptyState icon={TrendingUp} message="No recommendations for today yet." />
               </TableCell>
             </TableRow>
           )}
@@ -74,7 +76,7 @@ export function DailyRecommendationsTable({
             recommendations?.map((rec) => {
               const isPositive = rec.momentum_score >= 0;
               return (
-                <TableRow key={rec.symbol}>
+                <TableRow key={rec.symbol} className="transition-colors hover:bg-primary/5">
                   <TableCell className="font-medium">{rec.symbol}</TableCell>
                   <TableCell className="text-muted-foreground">{rec.name}</TableCell>
                   <TableCell>

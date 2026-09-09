@@ -34,6 +34,18 @@ const Toaster = ({ ...props }: ToasterProps) => {
           "--normal-text": "var(--popover-foreground)",
           "--normal-border": "var(--border)",
           "--border-radius": "var(--radius)",
+          // Tied to the same semantic tokens used everywhere else for outcome color (trade
+          // status, momentum sign) — not the blue accent, which stays reserved for brand and
+          // interactive elements only, same rule as the rest of the redesign.
+          "--success-bg": "var(--gain)",
+          "--success-text": "var(--gain-foreground)",
+          "--success-border": "var(--gain)",
+          "--error-bg": "var(--loss)",
+          "--error-text": "var(--loss-foreground)",
+          "--error-border": "var(--loss)",
+          "--warning-bg": "var(--pending)",
+          "--warning-text": "var(--pending-foreground)",
+          "--warning-border": "var(--pending)",
         } as React.CSSProperties
       }
       toastOptions={{

@@ -2,7 +2,9 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AreaSeries, ColorType, createChart, type IChartApi, type Time } from 'lightweight-charts';
+import { Activity } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/EmptyState';
 import type { DailyTradeItem } from '@/lib/types';
 
 interface AccountActivityChartProps {
@@ -115,8 +117,8 @@ export function AccountActivityChart({ trades, isLoading }: AccountActivityChart
 
   if (!trades || trades.filter((t) => t.amount !== null).length === 0) {
     return (
-      <div className="flex h-[220px] items-center justify-center text-sm text-muted-foreground">
-        No trading activity yet.
+      <div className="flex h-[220px] items-center justify-center">
+        <EmptyState icon={Activity} message="No trading activity yet." />
       </div>
     );
   }

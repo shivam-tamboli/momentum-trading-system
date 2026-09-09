@@ -1,9 +1,9 @@
 'use client';
 
 import { FormEvent, ReactNode, useState } from 'react';
-import { useMutation } from '@tanstack/react-query';
+import { useMutation, useQuery } from '@tanstack/react-query';
 import { isAxiosError } from 'axios';
-import { Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff, History } from 'lucide-react';
 import { toast } from 'sonner';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -11,6 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
+import { formatExactDateTime } from '@/lib/freshness';
 import {
   Card,
   CardContent,
@@ -18,6 +19,16 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table';
+import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/EmptyState';
 import {
   AlertDialog,
   AlertDialogContent,
@@ -27,7 +38,7 @@ import {
   AlertDialogDescription,
   AlertDialogClose,
 } from '@/components/ui/alert-dialog';
-import type { ErrorResponse, MeResponse, SelectableIndex } from '@/lib/types';
+import type { ErrorResponse, IndexSwitchHistoryItem, MeResponse, SelectableIndex } from '@/lib/types';
 import { SELECTABLE_INDEXES } from '@/lib/types';
 
 const INDEX_LABELS: Record<SelectableIndex, string> = {
@@ -93,6 +104,8 @@ export default function SettingsPage() {
           refetch={refetch}
         />
       </StrategyStep>
+
+      <SwitchHistoryCard />
     </div>
   );
 }
@@ -404,6 +417,82 @@ function IndexPickerCard({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+    </Card>
+  );
+}
+
+const COLUMN_COUNT = 3;
+
+function SwitchHistoryCard() {
+  const query = useQuery({
+    queryKey: ['index-switch-history'],
+    queryFn: async () => {
+      const { data } = await api.get<IndexSwitchHistoryItem[]>('/users/me/index-switch-history');
+      return data;
+    },
+  });
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Switch History</CardTitle>
+        <CardDescription>Every time you&apos;ve changed your tracked index, most recent first.</CardDescription>
+      </CardHeader>
+      <CardContent>
+        <Table>
+          <TableHeader>
+            <TableRow>
+              <TableHead>Switched</TableHead>
+              <TableHead>Change</TableHead>
+              <TableHead className="text-right">Investment Amount</TableHead>
+            </TableRow>
+          </TableHeader>
+          <TableBody>
+            {query.isLoading &&
+              Array.from({ length: 3 }).map((_, i) => (
+                <TableRow key={i}>
+                  {Array.from({ length: COLUMN_COUNT }).map((__, j) => (
+                    <TableCell key={j}>
+                      <Skeleton className="h-4 w-full" />
+                    </TableCell>
+                  ))}
+                </TableRow>
+              ))}
+
+            {!query.isLoading && (!query.data || query.data.length === 0) && (
+              <TableRow>
+                <TableCell colSpan={COLUMN_COUNT}>
+                  <EmptyState icon={History} message="No index switches yet." />
+                </TableCell>
+              </TableRow>
+            )}
+
+            {!query.isLoading &&
+              query.data?.map((entry, i) => (
+                <TableRow key={i}>
+                  <TableCell className="text-muted-foreground">
+                    {formatExactDateTime(entry.switched_at)}
+                  </TableCell>
+                  <TableCell className="font-medium">
+                    {entry.previous_index ? (
+                      <>
+                        {entry.previous_index} <span className="text-muted-foreground">→</span>{' '}
+                        {entry.new_index}
+                      </>
+                    ) : (
+                      <>
+                        {entry.new_index} <span className="text-muted-foreground">(first pick)</span>
+                      </>
+                    )}
+                  </TableCell>
+                  <TableCell className="text-right font-mono tabular-nums">
+                    {entry.investment_amount != null ? currency.format(entry.investment_amount) : '—'}
+                  </TableCell>
+                </TableRow>
+              ))}
+          </TableBody>
+        </Table>
+      </CardContent>
     </Card>
   );
 }

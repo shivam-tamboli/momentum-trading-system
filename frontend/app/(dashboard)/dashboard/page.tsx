@@ -1,5 +1,6 @@
 'use client';
 
+import { useState } from 'react';
 import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
@@ -12,6 +13,7 @@ import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
 import { PositionsTable } from '@/components/PositionsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
+import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type {
   AccountResponse,
@@ -24,6 +26,8 @@ import type {
 } from '@/lib/types';
 import { INDEX_RECOMMENDATION_PATH } from '@/lib/types';
 
+const TRADE_HISTORY_PAGE_SIZE = 20;
+
 export default function DashboardPage() {
   const {
     userId,
@@ -32,6 +36,8 @@ export default function DashboardPage() {
     investmentAmount,
     isLoading: isUserLoading,
   } = useUser();
+
+  const [tradeHistoryLimit, setTradeHistoryLimit] = useState(TRADE_HISTORY_PAGE_SIZE);
 
   const accountQuery = useQuery({
     queryKey: ['account', userId],
@@ -199,13 +205,24 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Recent Auto-Trades</CardTitle>
+          <CardTitle>Trade History</CardTitle>
         </CardHeader>
-        <CardContent>
+        <CardContent className="space-y-4">
           <TradeHistoryTable
-            trades={dailyTradesQuery.data?.slice(0, 10)}
+            trades={dailyTradesQuery.data?.slice(0, tradeHistoryLimit)}
             isLoading={dailyTradesQuery.isLoading}
           />
+          {dailyTradesQuery.data && dailyTradesQuery.data.length > tradeHistoryLimit && (
+            <div className="flex justify-center">
+              <Button
+                type="button"
+                variant="outline"
+                onClick={() => setTradeHistoryLimit((n) => n + TRADE_HISTORY_PAGE_SIZE)}
+              >
+                Load more
+              </Button>
+            </div>
+          )}
         </CardContent>
       </Card>
     </div>

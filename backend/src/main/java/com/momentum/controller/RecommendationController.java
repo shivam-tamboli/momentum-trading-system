@@ -1,5 +1,6 @@
 package com.momentum.controller;
 
+import com.fasterxml.jackson.annotation.JsonProperty;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.service.DailyScoringService;
 import com.momentum.service.IndexConstituentService;
@@ -63,8 +64,17 @@ public class RecommendationController {
     // failed scoring run — never show stale recommendations as if they were computed today.
     // ret6m/ret3m/ret1m/vol3m are nullable — rows written before that column existed have none,
     // though daily_recommendation is wiped and rewritten every scoring run so that's short-lived.
+    //
+    // Explicit @JsonProperty on the 4 return fields: Spring's SNAKE_CASE naming strategy inserts
+    // an underscore before each uppercase letter in the Java name, but "ret6m"/"vol3m" have no
+    // uppercase letter for it to find — there's no case boundary between a letter and a digit —
+    // so without this override the strategy passes the name through unchanged as "ret6m" instead
+    // of "ret_6m", silently breaking the frontend's snake_case contract.
     public record RecommendationResponse(String symbol, String name, BigDecimal momentumScore,
-                                          LocalDateTime scoredAt, BigDecimal ret6m, BigDecimal ret3m,
-                                          BigDecimal ret1m, BigDecimal vol3m) {
+                                          LocalDateTime scoredAt,
+                                          @JsonProperty("ret_6m") BigDecimal ret6m,
+                                          @JsonProperty("ret_3m") BigDecimal ret3m,
+                                          @JsonProperty("ret_1m") BigDecimal ret1m,
+                                          @JsonProperty("vol_3m") BigDecimal vol3m) {
     }
 }

@@ -87,8 +87,15 @@ export function DailyRecommendationsTable({
           {!isLoading &&
             recommendations?.map((rec) => {
               const isPositive = rec.momentum_score >= 0;
+              // Explicit typeof checks, not just "!== null" — a field that's missing from the
+              // response entirely comes through as undefined, not null, and undefined !== null
+              // is true in JS. That gap once let a backend/frontend naming mismatch silently
+              // reach Math.abs(undefined) and render as NaN instead of just hiding the affordance.
               const hasBreakdown =
-                rec.ret_6m !== null && rec.ret_3m !== null && rec.ret_1m !== null && rec.vol_3m !== null;
+                typeof rec.ret_6m === 'number' &&
+                typeof rec.ret_3m === 'number' &&
+                typeof rec.ret_1m === 'number' &&
+                typeof rec.vol_3m === 'number';
               const isExpanded = expandedSymbol === rec.symbol;
 
               return (

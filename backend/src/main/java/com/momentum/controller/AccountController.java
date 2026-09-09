@@ -64,6 +64,10 @@ public class AccountController {
         if (user == null) {
             return ResponseEntity.notFound().build();
         }
+        if (!hasAlpacaKey(user)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Connect your Alpaca account in Settings first."));
+        }
 
         AlpacaAPI userAlpacaAPI = buildUserAlpacaAPI(user);
 
@@ -97,6 +101,10 @@ public class AccountController {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             return ResponseEntity.notFound().build();
+        }
+        if (!hasAlpacaKey(user)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Connect your Alpaca account in Settings first."));
         }
 
         AlpacaAPI userAlpacaAPI = buildUserAlpacaAPI(user);
@@ -143,6 +151,10 @@ public class AccountController {
         User user = userRepository.findById(userId).orElse(null);
         if (user == null) {
             return ResponseEntity.notFound().build();
+        }
+        if (!hasAlpacaKey(user)) {
+            return ResponseEntity.status(HttpStatus.BAD_REQUEST)
+                    .body(new ErrorResponse("Connect your Alpaca account in Settings first."));
         }
 
         AlpacaAPI userAlpacaAPI = buildUserAlpacaAPI(user);
@@ -213,6 +225,14 @@ public class AccountController {
         } catch (Exception e) {
             return symbol;
         }
+    }
+
+    // Every endpoint in this controller builds a user-specific AlpacaAPI client from the user's
+    // saved key — with no key, the Alpaca SDK's constructor throws an uncaught
+    // IllegalArgumentException (crashing the request) rather than something callers can handle.
+    // This guard turns "no key yet" into a clean, expected 400 instead.
+    private boolean hasAlpacaKey(User user) {
+        return user.getAlpacaApiKeyEncrypted() != null && !user.getAlpacaApiKeyEncrypted().isBlank();
     }
 
     private AlpacaAPI buildUserAlpacaAPI(User user) {

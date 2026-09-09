@@ -94,7 +94,8 @@ public class AccountController {
                             new BigDecimal(position.getQuantity()),
                             new BigDecimal(position.getAverageEntryPrice()),
                             new BigDecimal(position.getCurrentPrice()),
-                            new BigDecimal(position.getUnrealizedProfitLoss())
+                            new BigDecimal(position.getUnrealizedProfitLoss()),
+                            new BigDecimal(position.getUnrealizedProfitLossPercent())
                     ))
                     .collect(Collectors.toList());
 
@@ -116,7 +117,8 @@ public class AccountController {
     }
 
     public record PositionResponse(String symbol, BigDecimal qty, BigDecimal avgEntryPrice,
-                                    BigDecimal currentPrice, BigDecimal unrealizedPl) {
+                                    BigDecimal currentPrice, BigDecimal unrealizedPl,
+                                    BigDecimal unrealizedPlPercent) {
     }
 
     public record ErrorResponse(String error) {

@@ -4,7 +4,7 @@ import { useEffect } from 'react';
 import { Button } from '@/components/ui/button';
 
 // Next.js route-level error boundary — the last-resort net for anything on this route group that
-// throws during render and isn't already contained locally (see AccountActivityChart for an
+// throws during render and isn't already contained locally (see IndexPriceChart for an
 // example of local containment). Without this, an uncaught error here falls through to Next's
 // generic default crash UI instead of something a user can actually recover from.
 export default function DashboardError({

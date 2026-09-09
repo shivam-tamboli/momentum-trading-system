@@ -21,6 +21,17 @@ export interface PositionItem {
   unrealized_pl_percent: number;
 }
 
+export interface IndexPricePoint {
+  date: string;
+  close: number;
+}
+
+export interface IndexPriceHistoryResponse {
+  index: string;
+  etf_symbol: string;
+  points: IndexPricePoint[];
+}
+
 export interface MeResponse {
   id: number;
   email: string;

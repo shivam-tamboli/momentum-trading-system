@@ -5,7 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { AccountSummary } from '@/components/AccountSummary';
-import { AccountActivityChart } from '@/components/AccountActivityChart';
+import { IndexPriceChart } from '@/components/IndexPriceChart';
 import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
 import { PositionsTable } from '@/components/PositionsTable';
@@ -15,6 +15,7 @@ import type {
   AccountResponse,
   DailyRecommendationItem,
   DailyTradeItem,
+  IndexPriceHistoryResponse,
   PositionItem,
   SelectableIndex,
 } from '@/lib/types';
@@ -69,6 +70,17 @@ export default function DashboardPage() {
     enabled: userId !== null,
   });
 
+  const indexPriceQuery = useQuery({
+    queryKey: ['index-price-history', selectedIndex],
+    queryFn: async () => {
+      const { data } = await api.get<IndexPriceHistoryResponse>('/index-price-history', {
+        params: { index: selectedIndex },
+      });
+      return data;
+    },
+    enabled: selectedIndex !== null,
+  });
+
   const heldSymbols = new Set(positionsQuery.data?.map((p) => p.symbol));
 
   if (isUserLoading || userId === null) {
@@ -115,21 +127,22 @@ export default function DashboardPage() {
         />
       )}
 
-      <Card>
-        <CardHeader>
-          <CardTitle>Trading Activity</CardTitle>
-          <CardDescription>
-            Daily buy + sell dollar volume — not portfolio value over time. There&apos;s no
-            historical value snapshot to chart yet.
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <AccountActivityChart
-            trades={dailyTradesQuery.data}
-            isLoading={dailyTradesQuery.isLoading}
-          />
-        </CardContent>
-      </Card>
+      {selectedIndex && (
+        <Card>
+          <CardHeader>
+            <CardTitle>{selectedIndex} — 30 Day Price</CardTitle>
+            <CardDescription>
+              {indexPriceQuery.data?.etf_symbol ?? '—'}, the ETF tracking {selectedIndex}.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <IndexPriceChart
+              points={indexPriceQuery.data?.points}
+              isLoading={indexPriceQuery.isLoading}
+            />
+          </CardContent>
+        </Card>
+      )}
 
       <Card>
         <CardHeader>

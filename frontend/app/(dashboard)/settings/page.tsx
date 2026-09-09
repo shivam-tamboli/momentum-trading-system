@@ -18,6 +18,15 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import {
+  AlertDialog,
+  AlertDialogContent,
+  AlertDialogHeader,
+  AlertDialogFooter,
+  AlertDialogTitle,
+  AlertDialogDescription,
+  AlertDialogClose,
+} from '@/components/ui/alert-dialog';
 import type { ErrorResponse, MeResponse, SelectableIndex } from '@/lib/types';
 import { SELECTABLE_INDEXES } from '@/lib/types';
 
@@ -296,6 +305,8 @@ function IndexPickerCard({
   investmentAmount: number | null;
   refetch: () => Promise<void>;
 }) {
+  const [pendingIndex, setPendingIndex] = useState<SelectableIndex | null>(null);
+
   const mutation = useMutation({
     mutationFn: async (index: SelectableIndex) => {
       const { data } = await api.post<MeResponse>('/users/me/selected-index', {
@@ -313,6 +324,7 @@ function IndexPickerCard({
         : 'Could not switch index.';
       toast.error(message);
     },
+    onSettled: () => setPendingIndex(null),
   });
 
   return (
@@ -340,7 +352,7 @@ function IndexPickerCard({
                 variant={isActive ? 'default' : 'outline'}
                 disabled={mutation.isPending || investmentAmount == null}
                 className={cn(isActive && 'pointer-events-none')}
-                onClick={() => mutation.mutate(index)}
+                onClick={() => setPendingIndex(index)}
               >
                 {INDEX_LABELS[index]}
                 {isActive && ' (current)'}
@@ -349,6 +361,37 @@ function IndexPickerCard({
           })}
         </div>
       </CardContent>
+
+      <AlertDialog open={pendingIndex !== null} onOpenChange={(open) => !open && setPendingIndex(null)}>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>
+              Switch to {pendingIndex ? INDEX_LABELS[pendingIndex] : ''}?
+            </AlertDialogTitle>
+            <AlertDialogDescription>
+              This sells everything you currently hold, then buys{' '}
+              {pendingIndex ? INDEX_LABELS[pendingIndex] : 'the new index'}&apos;s top 5. This
+              happens immediately if the market is open.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogClose
+              render={
+                <Button type="button" variant="outline">
+                  Cancel
+                </Button>
+              }
+            />
+            <Button
+              type="button"
+              disabled={mutation.isPending}
+              onClick={() => pendingIndex && mutation.mutate(pendingIndex)}
+            >
+              {mutation.isPending ? 'Switching…' : 'Confirm switch'}
+            </Button>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </Card>
   );
 }

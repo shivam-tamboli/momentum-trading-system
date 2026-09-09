@@ -1,5 +1,6 @@
 'use client';
 
+import Link from 'next/link';
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
@@ -8,7 +9,7 @@ import { AccountActivityChart } from '@/components/AccountActivityChart';
 import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type {
   AccountResponse,
   DailyRecommendationItem,
@@ -18,7 +19,13 @@ import type {
 import { INDEX_RECOMMENDATION_PATH } from '@/lib/types';
 
 export default function DashboardPage() {
-  const { userId, selectedIndex, isLoading: isUserLoading } = useUser();
+  const {
+    userId,
+    selectedIndex,
+    hasAlpacaKey,
+    investmentAmount,
+    isLoading: isUserLoading,
+  } = useUser();
 
   const accountQuery = useQuery({
     queryKey: ['account', userId],
@@ -55,9 +62,27 @@ export default function DashboardPage() {
     return <p className="text-sm text-muted-foreground">Loading account…</p>;
   }
 
+  const missingSetup = [
+    !hasAlpacaKey && 'connect your Alpaca account',
+    investmentAmount == null && 'set an investment amount',
+    !selectedIndex && 'choose an index',
+  ].filter((item): item is string => Boolean(item));
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Dashboard</h1>
+
+      {missingSetup.length > 0 && (
+        <div className="rounded-md border border-pending/50 bg-pending/10 px-4 py-3 text-sm">
+          <p className="font-medium text-pending">Nothing will trade yet</p>
+          <p className="mt-1 text-muted-foreground">
+            You still need to {missingSetup.join(', ')}.{' '}
+            <Link href="/settings" className="font-medium text-primary hover:underline">
+              Finish setup in Settings →
+            </Link>
+          </p>
+        </div>
+      )}
 
       <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
 
@@ -71,6 +96,10 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>Trading Activity</CardTitle>
+          <CardDescription>
+            Daily buy + sell dollar volume — not portfolio value over time. There&apos;s no
+            historical value snapshot to chart yet.
+          </CardDescription>
         </CardHeader>
         <CardContent>
           <AccountActivityChart

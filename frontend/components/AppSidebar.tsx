@@ -2,7 +2,18 @@
 
 import Link from 'next/link';
 import { usePathname, useRouter } from 'next/navigation';
-import { LayoutDashboard, LineChart, LogOut, Activity, Briefcase, Settings } from 'lucide-react';
+import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
+import {
+  LayoutDashboard,
+  LineChart,
+  LogOut,
+  Activity,
+  Briefcase,
+  Settings,
+  Sun,
+  Moon,
+} from 'lucide-react';
 import { cn } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Separator } from '@/components/ui/separator';
@@ -21,6 +32,17 @@ export function AppSidebarContent() {
   const pathname = usePathname();
   const router = useRouter();
   const { email } = useUser();
+  const { resolvedTheme, setTheme } = useTheme();
+
+  // next-themes can't know the real theme until after mount (it reads localStorage client-side
+  // only, to avoid a server/client mismatch) — rendering the toggle before then risks a flash of
+  // the wrong icon or a hydration warning, so it's held back one tick.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    queueMicrotask(() => setMounted(true));
+  }, []);
+
+  const isLight = resolvedTheme === 'light';
 
   const handleSignOut = async () => {
     const supabase = createClient();
@@ -31,16 +53,28 @@ export function AppSidebarContent() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex items-center gap-2.5 px-4 py-5">
-        <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-sm font-bold text-primary-foreground">
-          M
+      <div className="flex items-center justify-between gap-2.5 px-4 py-5">
+        <div className="flex items-center gap-2.5">
+          <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-sm font-bold text-primary-foreground">
+            M
+          </div>
+          <div className="flex flex-col leading-none">
+            <span className="text-sm font-semibold">Momentum</span>
+            <span className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
+              Trading Terminal
+            </span>
+          </div>
         </div>
-        <div className="flex flex-col leading-none">
-          <span className="text-sm font-semibold">Momentum</span>
-          <span className="font-mono text-[10px] tracking-widest text-muted-foreground uppercase">
-            Trading Terminal
-          </span>
-        </div>
+        {mounted && (
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setTheme(isLight ? 'dark' : 'light')}
+            aria-label={isLight ? 'Switch to dark theme' : 'Switch to light theme'}
+          >
+            {isLight ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+          </Button>
+        )}
       </div>
 
       <Separator />

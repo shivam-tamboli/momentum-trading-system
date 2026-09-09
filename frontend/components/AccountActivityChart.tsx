@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { AreaSeries, ColorType, createChart, type IChartApi, type Time } from 'lightweight-charts';
+import { useTheme } from 'next-themes';
 import { Activity } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
@@ -15,15 +16,25 @@ interface AccountActivityChartProps {
 // lightweight-charts renders to a plain <canvas> 2D context, which does not accept oklch() color
 // strings — unlike Tailwind classes, which get compiled down to hex/lab fallbacks at build time,
 // these are passed straight to the charting library's JS API and never go through that
-// compilation. Hex values below are the exact ones already live in the deployed CSS for
-// --muted-foreground and --primary in dark mode (verified against the real compiled bundle, not
-// just computed from scratch), so the chart matches the rest of the app's palette exactly.
-const CHART_COLORS = {
-  mutedForeground: '#a1a1a1',
-  gridLine: 'rgba(255, 255, 255, 0.06)',
-  accent: '#3080ff',
-  accentFillTop: 'rgba(48, 128, 255, 0.35)',
-  accentFillBottom: 'rgba(48, 128, 255, 0)',
+// compilation. Both palettes below are the exact hex values already live in the deployed CSS for
+// --muted-foreground/--primary/--border in each theme (pulled from the real compiled bundle, not
+// computed by hand — that produced a subtly wrong blue once already), so the chart always matches
+// the rest of the app's palette exactly, in either theme.
+const CHART_PALETTES = {
+  light: {
+    mutedForeground: '#737373',
+    gridLine: 'rgba(0, 0, 0, 0.06)',
+    accent: '#2563eb',
+    accentFillTop: 'rgba(37, 99, 235, 0.35)',
+    accentFillBottom: 'rgba(37, 99, 235, 0)',
+  },
+  dark: {
+    mutedForeground: '#a1a1a1',
+    gridLine: 'rgba(255, 255, 255, 0.06)',
+    accent: '#3080ff',
+    accentFillTop: 'rgba(48, 128, 255, 0.35)',
+    accentFillBottom: 'rgba(48, 128, 255, 0)',
+  },
 } as const;
 
 // There's no backend endpoint that snapshots portfolio value over time, and a buy/sell doesn't
@@ -49,6 +60,8 @@ export function AccountActivityChart({ trades, isLoading }: AccountActivityChart
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
+  const { resolvedTheme } = useTheme();
+  const colors = resolvedTheme === 'light' ? CHART_PALETTES.light : CHART_PALETTES.dark;
 
   useEffect(() => {
     if (!containerRef.current || isLoading) return;
@@ -62,25 +75,25 @@ export function AccountActivityChart({ trades, isLoading }: AccountActivityChart
       const chart = createChart(containerRef.current, {
         layout: {
           background: { type: ColorType.Solid, color: 'transparent' },
-          textColor: CHART_COLORS.mutedForeground,
+          textColor: colors.mutedForeground,
           fontFamily: 'var(--font-geist-mono)',
           fontSize: 11,
         },
         grid: {
           vertLines: { visible: false },
-          horzLines: { color: CHART_COLORS.gridLine },
+          horzLines: { color: colors.gridLine },
         },
         rightPriceScale: { borderVisible: false },
         timeScale: { borderVisible: false },
-        crosshair: { vertLine: { labelBackgroundColor: CHART_COLORS.accent } },
+        crosshair: { vertLine: { labelBackgroundColor: colors.accent } },
         height: 220,
         autoSize: true,
       });
 
       const series = chart.addSeries(AreaSeries, {
-        lineColor: CHART_COLORS.accent,
-        topColor: CHART_COLORS.accentFillTop,
-        bottomColor: CHART_COLORS.accentFillBottom,
+        lineColor: colors.accent,
+        topColor: colors.accentFillTop,
+        bottomColor: colors.accentFillBottom,
         lineWidth: 2,
         priceFormat: { type: 'custom', formatter: (v: number) => `$${v.toLocaleString()}` },
       });
@@ -100,7 +113,7 @@ export function AccountActivityChart({ trades, isLoading }: AccountActivityChart
       chartRef.current?.remove();
       chartRef.current = null;
     };
-  }, [trades, isLoading]);
+  }, [trades, isLoading, colors]);
 
   if (isLoading) {
     return <Skeleton className="h-[220px] w-full" />;

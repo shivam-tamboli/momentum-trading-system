@@ -55,13 +55,16 @@ public class RecommendationController {
     private List<RecommendationResponse> getForFilter(String filterName) {
         return dailyRecommendationRepository.findByFilterNameOrderByMomentumScoreDesc(filterName).stream()
                 .map(r -> new RecommendationResponse(r.getSymbol(), r.getName(), r.getMomentumScore(),
-                        r.getScoredAt()))
+                        r.getScoredAt(), r.getRet6m(), r.getRet3m(), r.getRet1m(), r.getVol3m()))
                 .collect(Collectors.toList());
     }
 
     // scoredAt lets the frontend tell fresh data from data kept by the safe-wipe guard after a
     // failed scoring run — never show stale recommendations as if they were computed today.
+    // ret6m/ret3m/ret1m/vol3m are nullable — rows written before that column existed have none,
+    // though daily_recommendation is wiped and rewritten every scoring run so that's short-lived.
     public record RecommendationResponse(String symbol, String name, BigDecimal momentumScore,
-                                          LocalDateTime scoredAt) {
+                                          LocalDateTime scoredAt, BigDecimal ret6m, BigDecimal ret3m,
+                                          BigDecimal ret1m, BigDecimal vol3m) {
     }
 }

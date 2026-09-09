@@ -1,4 +1,7 @@
-import { Check, TrendingUp } from 'lucide-react';
+'use client';
+
+import { Fragment, useState } from 'react';
+import { Check, ChevronDown, TrendingUp } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -10,6 +13,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
+import { ScoreCompositionBars } from '@/components/ScoreCompositionBars';
 import { cn } from '@/lib/utils';
 import { formatRelativeDate, formatScoredAt, isStale } from '@/lib/freshness';
 import type { DailyRecommendationItem } from '@/lib/types';
@@ -28,6 +32,8 @@ export function DailyRecommendationsTable({
   isLoading,
   heldSymbols,
 }: DailyRecommendationsTableProps) {
+  const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
+
   // All rows for a given filter come from the same scoring run, so the first row's timestamp
   // represents the whole set — if scoring failed today, the safe-wipe guard on the backend keeps
   // yesterday's rows rather than showing nothing, so this is the only signal the frontend has that
@@ -81,32 +87,64 @@ export function DailyRecommendationsTable({
           {!isLoading &&
             recommendations?.map((rec) => {
               const isPositive = rec.momentum_score >= 0;
+              const hasBreakdown =
+                rec.ret_6m !== null && rec.ret_3m !== null && rec.ret_1m !== null && rec.vol_3m !== null;
+              const isExpanded = expandedSymbol === rec.symbol;
+
               return (
-                <TableRow key={rec.symbol} className="transition-colors hover:bg-primary/5">
-                  <TableCell className="font-medium">
-                    <span className="flex items-center gap-2">
-                      {rec.symbol}
-                      {heldSymbols?.has(rec.symbol) && (
-                        <Badge variant="outline" className="gap-1 border-gain/30 bg-gain/10 text-gain">
-                          <Check className="h-3 w-3" />
-                          Held
-                        </Badge>
-                      )}
-                    </span>
-                  </TableCell>
-                  <TableCell className="text-muted-foreground">{rec.name}</TableCell>
-                  <TableCell>
-                    <span
-                      className={cn(
-                        'font-mono text-sm font-semibold tabular-nums',
-                        isPositive ? 'text-gain' : 'text-loss'
-                      )}
-                    >
-                      {isPositive ? '▲ ' : '▼ '}
-                      {rec.momentum_score.toFixed(4)}
-                    </span>
-                  </TableCell>
-                </TableRow>
+                <Fragment key={rec.symbol}>
+                  <TableRow
+                    className={cn(
+                      'transition-colors hover:bg-primary/5',
+                      hasBreakdown && 'cursor-pointer'
+                    )}
+                    onClick={() => hasBreakdown && setExpandedSymbol(isExpanded ? null : rec.symbol)}
+                  >
+                    <TableCell className="font-medium">
+                      <span className="flex items-center gap-2">
+                        {hasBreakdown && (
+                          <ChevronDown
+                            className={cn(
+                              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+                              isExpanded && 'rotate-180'
+                            )}
+                          />
+                        )}
+                        {rec.symbol}
+                        {heldSymbols?.has(rec.symbol) && (
+                          <Badge variant="outline" className="gap-1 border-gain/30 bg-gain/10 text-gain">
+                            <Check className="h-3 w-3" />
+                            Held
+                          </Badge>
+                        )}
+                      </span>
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">{rec.name}</TableCell>
+                    <TableCell>
+                      <span
+                        className={cn(
+                          'font-mono text-sm font-semibold tabular-nums',
+                          isPositive ? 'text-gain' : 'text-loss'
+                        )}
+                      >
+                        {isPositive ? '▲ ' : '▼ '}
+                        {rec.momentum_score.toFixed(4)}
+                      </span>
+                    </TableCell>
+                  </TableRow>
+                  {isExpanded && hasBreakdown && (
+                    <TableRow className="hover:bg-transparent">
+                      <TableCell colSpan={3} className="bg-muted/20">
+                        <ScoreCompositionBars
+                          ret6m={rec.ret_6m!}
+                          ret3m={rec.ret_3m!}
+                          ret1m={rec.ret_1m!}
+                          vol3m={rec.vol_3m!}
+                        />
+                      </TableCell>
+                    </TableRow>
+                  )}
+                </Fragment>
               );
             })}
         </TableBody>

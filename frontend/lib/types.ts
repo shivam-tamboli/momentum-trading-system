@@ -32,6 +32,12 @@ export interface DailyRecommendationItem {
   name: string;
   momentum_score: number;
   scored_at: string;
+  // Nullable — rows written before this was tracked have none, though daily_recommendation is
+  // wiped and rewritten every scoring run so that gap closes itself within a day.
+  ret_6m: number | null;
+  ret_3m: number | null;
+  ret_1m: number | null;
+  vol_3m: number | null;
 }
 
 export type TradeStatus = 'FILLED' | 'PENDING' | 'FAILED';

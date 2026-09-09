@@ -2,6 +2,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
+import { useUser } from '@/lib/user-context';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Card, CardContent } from '@/components/ui/card';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
@@ -36,17 +37,23 @@ function IndexTabContent({ index }: { index: SelectableIndex }) {
 }
 
 export default function RecommendationsPage() {
+  const { selectedIndex } = useUser();
+
   return (
     <div className="space-y-6">
       <h1 className="text-2xl font-bold">Recommendations</h1>
 
-      <Tabs defaultValue="S&P 500">
+      <Tabs defaultValue={selectedIndex ?? 'S&P 500'}>
         <TabsList>
-          {INDEX_TABS.map((tab) => (
-            <TabsTrigger key={tab.value} value={tab.value}>
-              {tab.label}
-            </TabsTrigger>
-          ))}
+          {INDEX_TABS.map((tab) => {
+            const isTracked = selectedIndex === tab.value;
+            return (
+              <TabsTrigger key={tab.value} value={tab.value} className="gap-1.5">
+                {isTracked && <span className="h-1.5 w-1.5 rounded-full bg-primary" />}
+                {tab.label}
+              </TabsTrigger>
+            );
+          })}
         </TabsList>
 
         {INDEX_TABS.map((tab) => (

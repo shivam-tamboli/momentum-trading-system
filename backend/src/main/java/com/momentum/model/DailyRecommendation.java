@@ -47,6 +47,23 @@ public class DailyRecommendation {
     @Column(name = "momentum_score", nullable = false, precision = 10, scale = 6)
     private BigDecimal momentumScore;
 
+    // The 4 inputs that produced momentumScore — DailyScoringService always computes these, but
+    // only started persisting them once the frontend needed to show a real breakdown instead of
+    // just the combined number. Nullable: rows written before this existed have no way to know
+    // these retroactively, but daily_recommendation is wiped and rewritten every scoring run, so
+    // that gap closes itself by the next run rather than lingering like daily_trade's history did.
+    @Column(name = "ret_6m", precision = 12, scale = 6)
+    private BigDecimal ret6m;
+
+    @Column(name = "ret_3m", precision = 12, scale = 6)
+    private BigDecimal ret3m;
+
+    @Column(name = "ret_1m", precision = 12, scale = 6)
+    private BigDecimal ret1m;
+
+    @Column(name = "vol_3m", precision = 12, scale = 6)
+    private BigDecimal vol3m;
+
     @CreationTimestamp
     @Column(name = "scored_at", updatable = false)
     private LocalDateTime scoredAt;

@@ -139,12 +139,18 @@ public class UserController {
         }
 
         String previousIndex = user.getSelectedIndex();
+        // Captured now, before switchIndex() places any trades — that call sells then buys
+        // sequentially across up to 10 legs and can take real wall-clock time (seconds). If the
+        // user changes their investment amount while that's in flight, a value re-read afterward
+        // would reflect the NEW amount, not what was actually used to size these trades. This
+        // local copy is what the history row uses, regardless of how long the switch takes.
+        BigDecimal investmentAmountAtSwitch = user.getInvestmentAmount();
 
         boolean hasKey = user.getAlpacaApiKeyEncrypted() != null && !user.getAlpacaApiKeyEncrypted().isBlank();
         if (!hasKey) {
             user.setSelectedIndex(request.selectedIndex());
             User saved = userRepository.save(user);
-            recordIndexSwitch(saved, previousIndex, request.selectedIndex());
+            recordIndexSwitch(saved, previousIndex, request.selectedIndex(), investmentAmountAtSwitch);
             return ResponseEntity.ok(toMeResponse(saved));
         }
 
@@ -155,15 +161,17 @@ public class UserController {
         }
 
         User updated = userRepository.findById(user.getId()).orElseThrow();
-        recordIndexSwitch(updated, previousIndex, request.selectedIndex());
+        recordIndexSwitch(updated, previousIndex, request.selectedIndex(), investmentAmountAtSwitch);
         return ResponseEntity.ok(toMeResponse(updated));
     }
 
     // Written on every selected_index change, including a user's very first pick (previousIndex
-    // null) — investmentAmount is captured at switch time since it can change independently later.
-    private void recordIndexSwitch(User user, String previousIndex, String newIndex) {
+    // null). investmentAmount is passed in explicitly — always the value captured at the moment
+    // the switch was initiated, never re-read afterward — so it can't drift from what the trades
+    // actually used even if the amount changes later in the same request or right after.
+    private void recordIndexSwitch(User user, String previousIndex, String newIndex, BigDecimal investmentAmount) {
         indexSwitchHistoryRepository.save(
-                new IndexSwitchHistory(null, user, previousIndex, newIndex, user.getInvestmentAmount(), null));
+                new IndexSwitchHistory(null, user, previousIndex, newIndex, investmentAmount, null));
     }
 
     @GetMapping("/users/me/index-switch-history")

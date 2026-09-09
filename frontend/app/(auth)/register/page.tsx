@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { AuthLayout } from '@/components/AuthLayout';
 import type { ErrorResponse, MeResponse } from '@/lib/types';
 
 // This is the one-time onboarding screen: shown when a logged-in user has no Alpaca key saved
@@ -54,20 +55,7 @@ export default function RegisterPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md space-y-6">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary font-mono text-lg font-bold text-primary-foreground">
-            M
-          </div>
-          <div>
-            <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
-              One-time setup
-            </p>
-            <h1 className="mt-1 text-xl font-semibold">Connect your account</h1>
-          </div>
-        </div>
-
+    <AuthLayout eyebrow="One-time setup" title="Connect your account">
         <Card className="w-full">
         <CardHeader>
           <CardTitle>Connect your Alpaca account</CardTitle>
@@ -117,7 +105,6 @@ export default function RegisterPage() {
           </form>
         </CardContent>
         </Card>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

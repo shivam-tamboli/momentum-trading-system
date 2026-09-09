@@ -2,8 +2,19 @@
 // Algorithm Status card and the recommendations table's "Last scored" line — one place computes
 // "stale" and formats these timestamps, so the two can't silently disagree.
 
+// Backend LocalDateTime values (scored_at, traded_at, last_run_at) serialize with no timezone
+// suffix, e.g. "2026-09-09T10:30:59.439754" — but represent real UTC wall-clock time, since the
+// JVM runs in UTC. Without an explicit Z, JS's Date parser treats a timezone-less date-time
+// string as the browser's own local time instead, which silently mis-renders every timestamp in
+// the app for any viewer not physically in UTC. Every raw backend timestamp must go through this
+// before becoming a Date.
+export function parseBackendTimestamp(value: string): Date {
+  const hasTimezone = /[Zz]|[+-]\d\d:\d\d$/.test(value);
+  return new Date(hasTimezone ? value : `${value}Z`);
+}
+
 export function isStale(scoredAt: string): boolean {
-  return new Date(scoredAt).toDateString() !== new Date().toDateString();
+  return parseBackendTimestamp(scoredAt).toDateString() !== new Date().toDateString();
 }
 
 function isSameLocalDay(a: Date, b: Date): boolean {
@@ -24,24 +35,43 @@ function relativeDayLabel(date: Date, now: Date = new Date()): string {
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
 
-const timeFormatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
-const exactFormatter = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium', timeStyle: 'short' });
+const IST_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'Asia/Kolkata',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
 
-// "Today at 2:20 PM" / "Yesterday at 2:20 PM" / "Sep 3 at 2:20 PM" — all in the browser's local
-// timezone, since Intl.DateTimeFormat with no explicit timeZone uses the runtime's local zone.
+const ET_TIME_FORMATTER = new Intl.DateTimeFormat('en-US', {
+  timeZone: 'America/New_York',
+  hour: 'numeric',
+  minute: '2-digit',
+  hour12: true,
+});
+
+// "4:01 PM IST (10:31 AM ET)" — always both zones, regardless of the viewer's own browser
+// timezone. America/New_York resolves EDT vs EST automatically via the real IANA tz database,
+// not a fixed offset, so this is correct year-round without any manual DST handling.
+export function formatDualTimezone(date: Date): string {
+  return `${IST_TIME_FORMATTER.format(date)} IST (${ET_TIME_FORMATTER.format(date)} ET)`;
+}
+
+// "Today at 4:01 PM IST (10:31 AM ET)" / "Yesterday at ..." / "Sep 3 at ..."
 export function formatScoredAt(scoredAt: string): string {
-  const date = new Date(scoredAt);
-  return `${relativeDayLabel(date)} at ${timeFormatter.format(date)}`;
+  const date = parseBackendTimestamp(scoredAt);
+  return `${relativeDayLabel(date)} at ${formatDualTimezone(date)}`;
 }
 
 // "Sep 3" / "Yesterday" — used in the stale-warning sentence, where the time isn't needed.
 export function formatRelativeDate(scoredAt: string): string {
-  return relativeDayLabel(new Date(scoredAt));
+  return relativeDayLabel(parseBackendTimestamp(scoredAt));
 }
 
-// "Sep 7, 2026, 2:20 PM" — the exact last-ran timestamp shown on the Algorithm Status card.
+// "Sep 7, 2026, 4:01 PM IST (10:31 AM ET)"
 export function formatExactDateTime(scoredAt: string): string {
-  return exactFormatter.format(new Date(scoredAt));
+  const date = parseBackendTimestamp(scoredAt);
+  const dateLabel = new Intl.DateTimeFormat('en-US', { dateStyle: 'medium' }).format(date);
+  return `${dateLabel}, ${formatDualTimezone(date)}`;
 }
 
 // Scoring runs weekdays at 10:30 UTC (6:30 AM ET, 3 hours before the regular 9:30 AM market
@@ -62,7 +92,7 @@ export function getNextScoringRun(from: Date = new Date()): Date {
   return candidate;
 }
 
-// "Today at 6:30 AM" / "Tomorrow at 6:30 AM" / "Sep 8 at 6:30 AM"
+// "Today at 4:01 PM IST (10:31 AM ET)" / "Tomorrow at ..." / "Sep 8 at ..."
 export function formatNextRun(date: Date): string {
-  return `${relativeDayLabel(date)} at ${timeFormatter.format(date)}`;
+  return `${relativeDayLabel(date)} at ${formatDualTimezone(date)}`;
 }

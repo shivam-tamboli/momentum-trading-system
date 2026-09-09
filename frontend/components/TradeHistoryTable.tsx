@@ -12,7 +12,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
-import { formatRelativeDate } from '@/lib/freshness';
+import { formatDualTimezone, formatRelativeDate, parseBackendTimestamp } from '@/lib/freshness';
 import type { DailyTradeItem } from '@/lib/types';
 
 const ACTION_STYLES: Record<DailyTradeItem['action'], string> = {
@@ -36,8 +36,6 @@ const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
 });
-
-const timeFormatter = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit' });
 
 function formatCurrency(value: number | null): string {
   return value === null ? '—' : currency.format(value);
@@ -180,7 +178,7 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
                         {formatQuantity(trade.quantity)}
                       </TableCell>
                       <TableCell className="font-mono text-muted-foreground tabular-nums">
-                        {timeFormatter.format(new Date(trade.traded_at))}
+                        {formatDualTimezone(parseBackendTimestamp(trade.traded_at))}
                       </TableCell>
                     </TableRow>
                   );

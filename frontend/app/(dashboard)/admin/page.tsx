@@ -6,6 +6,7 @@ import { Badge } from '@/components/ui/badge';
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
+import { formatExactDateTime } from '@/lib/freshness';
 import type { AlgorithmStats, MetricsResponse } from '@/lib/types';
 
 const REFRESH_INTERVAL_MS = 30000;
@@ -54,7 +55,7 @@ function formatDuration(durationMs: number | null): string {
 
 function formatTimestamp(timestamp: string | null): string {
   if (!timestamp) return 'Never';
-  return new Date(timestamp).toLocaleString();
+  return formatExactDateTime(timestamp);
 }
 
 export default function AdminMetricsPage() {

@@ -5,6 +5,7 @@ import { useQuery } from '@tanstack/react-query';
 import { api } from '@/lib/api';
 import { useUser } from '@/lib/user-context';
 import { AccountSummary } from '@/components/AccountSummary';
+import { PortfolioComposition } from '@/components/PortfolioComposition';
 import { IndexPriceChart } from '@/components/IndexPriceChart';
 import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
@@ -110,6 +111,16 @@ export default function DashboardPage() {
       )}
 
       <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Portfolio Composition</CardTitle>
+          <CardDescription>How your investment is split across your current holdings.</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <PortfolioComposition positions={positionsQuery.data} isLoading={positionsQuery.isLoading} />
+        </CardContent>
+      </Card>
 
       <Card>
         <CardHeader>

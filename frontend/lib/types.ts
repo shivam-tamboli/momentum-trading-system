@@ -32,6 +32,10 @@ export interface IndexPriceHistoryResponse {
   points: IndexPricePoint[];
 }
 
+// Backend returns Map<String, List<PricePoint>> — a plain object keyed by symbol, points reusing
+// the same {date, close} shape as IndexPricePoint.
+export type StockPriceHistoryResponse = Record<string, IndexPricePoint[]>;
+
 export interface IndexSwitchHistoryItem {
   // Null for a user's very first index pick — there was no prior selection to record.
   previous_index: string | null;

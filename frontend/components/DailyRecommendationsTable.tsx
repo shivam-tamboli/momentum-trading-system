@@ -1,7 +1,9 @@
 'use client';
 
 import { Fragment, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Check, ChevronDown, TrendingUp } from 'lucide-react';
+import { api } from '@/lib/api';
 import {
   Table,
   TableBody,
@@ -14,6 +16,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { ScoreCompositionBars } from '@/components/ScoreCompositionBars';
+import { Sparkline } from '@/components/Sparkline';
 import { cn } from '@/lib/utils';
 import {
   formatNextRun,
@@ -22,7 +25,7 @@ import {
   getNextScoringRun,
   isStale,
 } from '@/lib/freshness';
-import type { DailyRecommendationItem } from '@/lib/types';
+import type { DailyRecommendationItem, StockPriceHistoryResponse } from '@/lib/types';
 
 interface DailyRecommendationsTableProps {
   recommendations: DailyRecommendationItem[] | undefined;
@@ -46,6 +49,20 @@ export function DailyRecommendationsTable({
   // what's on screen isn't actually today's data.
   const scoredAt = recommendations && recommendations.length > 0 ? recommendations[0].scored_at : null;
   const stale = scoredAt !== null && isStale(scoredAt);
+
+  const symbols = recommendations?.map((r) => r.symbol) ?? [];
+  const symbolsKey = [...symbols].sort().join(',');
+
+  const priceHistoryQuery = useQuery({
+    queryKey: ['stock-price-history', symbolsKey],
+    queryFn: async () => {
+      const { data } = await api.get<StockPriceHistoryResponse>('/stock-price-history', {
+        params: { symbols: symbolsKey },
+      });
+      return data;
+    },
+    enabled: symbols.length > 0,
+  });
 
   return (
     <div className="space-y-3">
@@ -137,14 +154,17 @@ export function DailyRecommendationsTable({
                     </TableCell>
                     <TableCell className="text-muted-foreground">{rec.name}</TableCell>
                     <TableCell>
-                      <span
-                        className={cn(
-                          'font-mono text-sm font-semibold tabular-nums',
-                          isPositive ? 'text-gain' : 'text-loss'
-                        )}
-                      >
-                        {isPositive ? '▲ ' : '▼ '}
-                        {rec.momentum_score.toFixed(4)}
+                      <span className="flex items-center gap-3">
+                        <span
+                          className={cn(
+                            'font-mono text-sm font-semibold tabular-nums',
+                            isPositive ? 'text-gain' : 'text-loss'
+                          )}
+                        >
+                          {isPositive ? '▲ ' : '▼ '}
+                          {rec.momentum_score.toFixed(4)}
+                        </span>
+                        <Sparkline points={priceHistoryQuery.data?.[rec.symbol]} />
                       </span>
                     </TableCell>
                   </TableRow>

@@ -76,6 +76,12 @@ public class DailyTrade {
     @Column(name = "alpaca_order_id")
     private String alpacaOrderId;
 
+    // Which index this trade belonged to at the moment it was placed — S&P 500, NASDAQ 100, etc.
+    // Nullable: rows created before this column existed have no way to know this retroactively,
+    // so they stay null rather than get backfilled with a guess.
+    @Column(name = "index_filter")
+    private String indexFilter;
+
     @CreationTimestamp
     @Column(name = "traded_at", updatable = false)
     private LocalDateTime tradedAt;

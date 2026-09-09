@@ -55,7 +55,8 @@ public class DailyTradingController {
                         trade.getAmount(),
                         trade.getPricePerShare(),
                         trade.getQuantity(),
-                        trade.getTradedAt()
+                        trade.getTradedAt(),
+                        trade.getIndexFilter()
                 ))
                 .collect(Collectors.toList());
 
@@ -63,7 +64,8 @@ public class DailyTradingController {
     }
 
     public record DailyTradeItem(String symbol, ActionType action, TradeStatus status, BigDecimal amount,
-                                  BigDecimal pricePerShare, BigDecimal quantity, LocalDateTime tradedAt) {
+                                  BigDecimal pricePerShare, BigDecimal quantity, LocalDateTime tradedAt,
+                                  String indexFilter) {
     }
 
     public record ErrorResponse(String error) {

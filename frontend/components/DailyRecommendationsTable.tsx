@@ -134,7 +134,12 @@ export function DailyRecommendationsTable({
                     onClick={() => hasBreakdown && setExpandedSymbol(isExpanded ? null : rec.symbol)}
                   >
                     <TableCell className="font-medium">
-                      <span className="flex items-center gap-2">
+                      {/* h-6 matches the sparkline's fixed height (see Sparkline's default height
+                          prop) — every cell in this row shares that same reference height so their
+                          items-center all land on the identical vertical center, rather than each
+                          span being centered independently within its own (possibly different)
+                          natural height. */}
+                      <span className="flex h-6 items-center gap-2 leading-none">
                         {hasBreakdown && (
                           <ChevronDown
                             className={cn(
@@ -152,9 +157,11 @@ export function DailyRecommendationsTable({
                         )}
                       </span>
                     </TableCell>
-                    <TableCell className="text-muted-foreground">{rec.name}</TableCell>
+                    <TableCell className="text-muted-foreground">
+                      <span className="flex h-6 items-center leading-none">{rec.name}</span>
+                    </TableCell>
                     <TableCell>
-                      <span className="flex items-center gap-3">
+                      <span className="flex h-6 items-center gap-3 leading-none">
                         <span
                           className={cn(
                             'font-mono text-sm font-semibold tabular-nums',

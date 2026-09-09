@@ -10,6 +10,15 @@ export interface ErrorResponse {
   error: string;
 }
 
+export interface PositionItem {
+  symbol: string;
+  qty: number;
+  avg_entry_price: number;
+  current_price: number;
+  unrealized_pl: number;
+  unrealized_pl_percent: number;
+}
+
 export interface MeResponse {
   id: number;
   email: string;

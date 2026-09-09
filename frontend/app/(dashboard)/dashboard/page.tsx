@@ -8,12 +8,14 @@ import { AccountSummary } from '@/components/AccountSummary';
 import { AccountActivityChart } from '@/components/AccountActivityChart';
 import { AlgorithmStatusCard } from '@/components/AlgorithmStatusCard';
 import { DailyRecommendationsTable } from '@/components/DailyRecommendationsTable';
+import { PositionsTable } from '@/components/PositionsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
 import type {
   AccountResponse,
   DailyRecommendationItem,
   DailyTradeItem,
+  PositionItem,
   SelectableIndex,
 } from '@/lib/types';
 import { INDEX_RECOMMENDATION_PATH } from '@/lib/types';
@@ -58,6 +60,17 @@ export default function DashboardPage() {
     enabled: userId !== null,
   });
 
+  const positionsQuery = useQuery({
+    queryKey: ['positions', userId],
+    queryFn: async () => {
+      const { data } = await api.get<PositionItem[]>(`/${userId}/positions`);
+      return data;
+    },
+    enabled: userId !== null,
+  });
+
+  const heldSymbols = new Set(positionsQuery.data?.map((p) => p.symbol));
+
   if (isUserLoading || userId === null) {
     return <p className="text-sm text-muted-foreground">Loading account…</p>;
   }
@@ -85,6 +98,15 @@ export default function DashboardPage() {
       )}
 
       <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
+
+      <Card>
+        <CardHeader>
+          <CardTitle>Your Positions</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <PositionsTable positions={positionsQuery.data} isLoading={positionsQuery.isLoading} />
+        </CardContent>
+      </Card>
 
       {selectedIndex && (
         <AlgorithmStatusCard
@@ -120,6 +142,7 @@ export default function DashboardPage() {
             <DailyRecommendationsTable
               recommendations={dailyRecommendationsQuery.data}
               isLoading={dailyRecommendationsQuery.isLoading}
+              heldSymbols={heldSymbols}
             />
           ) : (
             <p className="text-sm text-muted-foreground">

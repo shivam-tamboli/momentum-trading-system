@@ -1,4 +1,4 @@
-import { TrendingUp } from 'lucide-react';
+import { Check, TrendingUp } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -7,6 +7,7 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table';
+import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
@@ -16,11 +17,16 @@ import type { DailyRecommendationItem } from '@/lib/types';
 interface DailyRecommendationsTableProps {
   recommendations: DailyRecommendationItem[] | undefined;
   isLoading: boolean;
+  // Symbols the user currently holds — lets a row show "already held" next to the recommendation
+  // instead of leaving it ambiguous whether this stock is about to be bought or already is one.
+  // Optional: the standalone Recommendations page doesn't have positions data to pass in.
+  heldSymbols?: Set<string>;
 }
 
 export function DailyRecommendationsTable({
   recommendations,
   isLoading,
+  heldSymbols,
 }: DailyRecommendationsTableProps) {
   // All rows for a given filter come from the same scoring run, so the first row's timestamp
   // represents the whole set — if scoring failed today, the safe-wipe guard on the backend keeps
@@ -77,7 +83,17 @@ export function DailyRecommendationsTable({
               const isPositive = rec.momentum_score >= 0;
               return (
                 <TableRow key={rec.symbol} className="transition-colors hover:bg-primary/5">
-                  <TableCell className="font-medium">{rec.symbol}</TableCell>
+                  <TableCell className="font-medium">
+                    <span className="flex items-center gap-2">
+                      {rec.symbol}
+                      {heldSymbols?.has(rec.symbol) && (
+                        <Badge variant="outline" className="gap-1 border-gain/30 bg-gain/10 text-gain">
+                          <Check className="h-3 w-3" />
+                          Held
+                        </Badge>
+                      )}
+                    </span>
+                  </TableCell>
                   <TableCell className="text-muted-foreground">{rec.name}</TableCell>
                   <TableCell>
                     <span

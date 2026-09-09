@@ -2,6 +2,8 @@ export interface AccountResponse {
   cash: number;
   buying_power: number;
   portfolio_value: number;
+  // Alpaca's own record of the previous trading day's closing equity — real, not estimated.
+  last_equity: number;
 }
 
 export interface ErrorResponse {

@@ -146,3 +146,10 @@
     @apply font-sans;
   }
 }
+
+/* lightweight-charts' own attribution link (id confirmed from the installed package source) —
+   kept visible rather than disabled via the library's attributionLogo option, since the ask was
+   specifically to disable the click, not remove the attribution itself. */
+a#tv-attr-logo {
+  pointer-events: none;
+}

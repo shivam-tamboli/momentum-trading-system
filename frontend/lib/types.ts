@@ -32,6 +32,14 @@ export interface IndexPriceHistoryResponse {
   points: IndexPricePoint[];
 }
 
+export interface IndexSwitchHistoryItem {
+  // Null for a user's very first index pick — there was no prior selection to record.
+  previous_index: string | null;
+  new_index: string;
+  investment_amount: number | null;
+  switched_at: string;
+}
+
 export interface MeResponse {
   id: number;
   email: string;

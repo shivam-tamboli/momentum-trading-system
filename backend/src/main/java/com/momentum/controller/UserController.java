@@ -3,7 +3,9 @@ package com.momentum.controller;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.momentum.exception.InvestmentAmountNotSetException;
+import com.momentum.model.IndexSwitchHistory;
 import com.momentum.model.User;
+import com.momentum.repository.IndexSwitchHistoryRepository;
 import com.momentum.repository.UserRepository;
 import com.momentum.service.DailyScoringService;
 import com.momentum.service.DailyTradingService;
@@ -25,6 +27,8 @@ import org.springframework.web.client.RestClientException;
 import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.util.List;
 import java.util.Set;
 
 @RestController
@@ -47,12 +51,15 @@ public class UserController {
     private final UserRepository userRepository;
     private final EncryptionUtil encryptionUtil;
     private final DailyTradingService dailyTradingService;
+    private final IndexSwitchHistoryRepository indexSwitchHistoryRepository;
 
     public UserController(UserRepository userRepository, EncryptionUtil encryptionUtil,
-                           DailyTradingService dailyTradingService) {
+                           DailyTradingService dailyTradingService,
+                           IndexSwitchHistoryRepository indexSwitchHistoryRepository) {
         this.userRepository = userRepository;
         this.encryptionUtil = encryptionUtil;
         this.dailyTradingService = dailyTradingService;
+        this.indexSwitchHistoryRepository = indexSwitchHistoryRepository;
     }
 
     // Auto-creates a bare user (no Alpaca key yet) on first call for a given email, instead of
@@ -131,10 +138,13 @@ public class UserController {
             return ResponseEntity.notFound().build();
         }
 
+        String previousIndex = user.getSelectedIndex();
+
         boolean hasKey = user.getAlpacaApiKeyEncrypted() != null && !user.getAlpacaApiKeyEncrypted().isBlank();
         if (!hasKey) {
             user.setSelectedIndex(request.selectedIndex());
             User saved = userRepository.save(user);
+            recordIndexSwitch(saved, previousIndex, request.selectedIndex());
             return ResponseEntity.ok(toMeResponse(saved));
         }
 
@@ -145,7 +155,40 @@ public class UserController {
         }
 
         User updated = userRepository.findById(user.getId()).orElseThrow();
+        recordIndexSwitch(updated, previousIndex, request.selectedIndex());
         return ResponseEntity.ok(toMeResponse(updated));
+    }
+
+    // Written on every selected_index change, including a user's very first pick (previousIndex
+    // null) — investmentAmount is captured at switch time since it can change independently later.
+    private void recordIndexSwitch(User user, String previousIndex, String newIndex) {
+        indexSwitchHistoryRepository.save(
+                new IndexSwitchHistory(null, user, previousIndex, newIndex, user.getInvestmentAmount(), null));
+    }
+
+    @GetMapping("/users/me/index-switch-history")
+    public ResponseEntity<?> getIndexSwitchHistory(
+            @RequestHeader(value = "Authorization", required = false) String authHeader) {
+
+        String email;
+        try {
+            email = resolveEmailFromHeader(authHeader);
+        } catch (UnauthorizedException e) {
+            return ResponseEntity.status(HttpStatus.UNAUTHORIZED).body(new ErrorResponse(e.getMessage()));
+        }
+
+        User user = userRepository.findByEmail(email).orElse(null);
+        if (user == null) {
+            return ResponseEntity.notFound().build();
+        }
+
+        List<IndexSwitchHistoryItem> history = indexSwitchHistoryRepository
+                .findByUserOrderBySwitchedAtDesc(user).stream()
+                .map(h -> new IndexSwitchHistoryItem(
+                        h.getPreviousIndex(), h.getNewIndex(), h.getInvestmentAmount(), h.getSwitchedAt()))
+                .toList();
+
+        return ResponseEntity.ok(history);
     }
 
     // "How much do I want to invest per rebalance cycle" — set once during onboarding or updated
@@ -239,6 +282,10 @@ public class UserController {
 
     public record MeResponse(Long id, String email, boolean hasAlpacaKey, String selectedIndex,
                               BigDecimal investmentAmount) {
+    }
+
+    public record IndexSwitchHistoryItem(String previousIndex, String newIndex,
+                                          BigDecimal investmentAmount, LocalDateTime switchedAt) {
     }
 
     public record ErrorResponse(String error) {

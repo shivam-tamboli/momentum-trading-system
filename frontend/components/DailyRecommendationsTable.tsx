@@ -15,7 +15,13 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { ScoreCompositionBars } from '@/components/ScoreCompositionBars';
 import { cn } from '@/lib/utils';
-import { formatRelativeDate, formatScoredAt, isStale } from '@/lib/freshness';
+import {
+  formatNextRun,
+  formatRelativeDate,
+  formatScoredAt,
+  getNextScoringRun,
+  isStale,
+} from '@/lib/freshness';
 import type { DailyRecommendationItem } from '@/lib/types';
 
 interface DailyRecommendationsTableProps {
@@ -79,7 +85,10 @@ export function DailyRecommendationsTable({
           {!isLoading && (!recommendations || recommendations.length === 0) && (
             <TableRow>
               <TableCell colSpan={3}>
-                <EmptyState icon={TrendingUp} message="No recommendations for today yet." />
+                <EmptyState
+                  icon={TrendingUp}
+                  message={`Scores not available yet. Next run: ${formatNextRun(getNextScoringRun())}.`}
+                />
               </TableCell>
             </TableRow>
           )}

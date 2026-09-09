@@ -118,7 +118,10 @@ export function AccountActivityChart({ trades, isLoading }: AccountActivityChart
   if (!trades || trades.filter((t) => t.amount !== null).length === 0) {
     return (
       <div className="flex h-[220px] items-center justify-center">
-        <EmptyState icon={Activity} message="No trading activity yet." />
+        <EmptyState
+          icon={Activity}
+          message="No activity yet. Trading begins automatically at market open."
+        />
       </div>
     );
   }

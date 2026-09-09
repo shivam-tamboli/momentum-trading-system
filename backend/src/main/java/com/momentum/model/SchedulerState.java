@@ -34,4 +34,13 @@ public class SchedulerState {
 
     @Column(name = "job2_last_run_date")
     private LocalDate job2LastRunDate;
+
+    // Persisted so the /metrics fallback (MetricsController.buildAlgorithmStats) can show real
+    // values instead of "—" after a restart wipes MetricsService's in-memory-only run stats —
+    // these two are the process-run diagnostics from the most recent *successful* scoring run.
+    @Column(name = "last_run_duration_ms")
+    private Long lastRunDurationMs;
+
+    @Column(name = "last_run_stocks_scored")
+    private Integer lastRunStocksScored;
 }

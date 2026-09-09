@@ -1,10 +1,12 @@
 package com.momentum.controller;
 
 import com.momentum.model.DailyRecommendation;
+import com.momentum.model.SchedulerState;
 import com.momentum.model.enums.ActionType;
 import com.momentum.model.enums.AlgorithmRunStatus;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.repository.DailyTradeRepository;
+import com.momentum.repository.SchedulerStateRepository;
 import com.momentum.service.IndexConstituentService;
 import com.momentum.service.MetricsService;
 import org.springframework.http.ResponseEntity;
@@ -26,19 +28,24 @@ import java.util.Set;
 @RestController
 public class MetricsController {
 
+    private static final Long SCHEDULER_STATE_ID = 1L;
+
     private final MetricsService metricsService;
     private final DailyRecommendationRepository dailyRecommendationRepository;
     private final DailyTradeRepository dailyTradeRepository;
     private final IndexConstituentService indexConstituentService;
+    private final SchedulerStateRepository schedulerStateRepository;
 
     public MetricsController(MetricsService metricsService,
                               DailyRecommendationRepository dailyRecommendationRepository,
                               DailyTradeRepository dailyTradeRepository,
-                              IndexConstituentService indexConstituentService) {
+                              IndexConstituentService indexConstituentService,
+                              SchedulerStateRepository schedulerStateRepository) {
         this.metricsService = metricsService;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.dailyTradeRepository = dailyTradeRepository;
         this.indexConstituentService = indexConstituentService;
+        this.schedulerStateRepository = schedulerStateRepository;
     }
 
     @GetMapping("/metrics")
@@ -83,9 +90,9 @@ public class MetricsController {
     // more often than the keep-alive job can reliably prevent — see the daily-trading-cron and
     // keep-alive workflows), and every restart wipes that state back to NEVER_RUN even though a
     // previous process instance genuinely scored successfully. When this instance has nothing to
-    // report, fall back to the one thing that's actually persisted: the most recent
-    // daily_recommendation row's scored_at. duration_ms and stocks_scored have no DB equivalent
-    // (they were never designed to be persisted) and stay null in the fallback case.
+    // report, fall back to what's actually persisted: the most recent daily_recommendation row's
+    // scored_at, plus duration_ms/stocks_scored from scheduler_state (DailyScoringService writes
+    // both there on every successful run specifically so this fallback never has to show "—").
     private AlgorithmStats buildAlgorithmStats() {
         AlgorithmRunStatus liveStatus = metricsService.getAlgorithmStatus();
 
@@ -104,11 +111,13 @@ public class MetricsController {
             return new AlgorithmStats(liveStatus.name(), null, null, null, null);
         }
 
+        Optional<SchedulerState> schedulerState = schedulerStateRepository.findById(SCHEDULER_STATE_ID);
+
         return new AlgorithmStats(
                 AlgorithmRunStatus.SUCCESS.name(),
                 mostRecent.get().getScoredAt(),
-                null,
-                null,
+                schedulerState.map(SchedulerState::getLastRunDurationMs).orElse(null),
+                schedulerState.map(SchedulerState::getLastRunStocksScored).orElse(null),
                 null
         );
     }

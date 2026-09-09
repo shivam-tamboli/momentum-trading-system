@@ -1,7 +1,9 @@
 package com.momentum.service;
 
 import com.momentum.model.DailyRecommendation;
+import com.momentum.model.SchedulerState;
 import com.momentum.repository.DailyRecommendationRepository;
+import com.momentum.repository.SchedulerStateRepository;
 import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.assets.Asset;
 import net.jacobpeterson.alpaca.model.endpoint.assets.enums.AssetClass;
@@ -50,21 +52,26 @@ public class DailyScoringService {
 
     public static final String FULL_MARKET = "FULL_MARKET";
 
+    private static final Long SCHEDULER_STATE_ID = 1L;
+
     private final AlpacaAPI systemAlpacaAPI;
     private final IndexConstituentService indexConstituentService;
     private final DailyRecommendationRepository dailyRecommendationRepository;
     private final MetricsService metricsService;
+    private final SchedulerStateRepository schedulerStateRepository;
     private final TransactionTemplate transactionTemplate;
 
     public DailyScoringService(AlpacaAPI systemAlpacaAPI,
                                 IndexConstituentService indexConstituentService,
                                 DailyRecommendationRepository dailyRecommendationRepository,
                                 MetricsService metricsService,
+                                SchedulerStateRepository schedulerStateRepository,
                                 PlatformTransactionManager transactionManager) {
         this.systemAlpacaAPI = systemAlpacaAPI;
         this.indexConstituentService = indexConstituentService;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.metricsService = metricsService;
+        this.schedulerStateRepository = schedulerStateRepository;
         // A plain TransactionTemplate rather than @Transactional: this class calls the
         // delete+save block on itself (self-invocation), which Spring's proxy-based @Transactional
         // would silently ignore. TransactionTemplate wraps just those two calls — not the whole
@@ -165,12 +172,26 @@ public class DailyScoringService {
             });
 
             metricsService.recordRunSuccess(scored.size(), durationMs);
+            persistRunStats(scored.size(), durationMs);
             log.info("Daily scoring complete in {}ms, {} recommendation rows stored", durationMs, toSave.size());
         } catch (Exception e) {
             long durationMs = System.currentTimeMillis() - startTime;
             metricsService.recordRunFailure(e.getMessage(), durationMs);
             throw e;
         }
+    }
+
+    // MetricsService's own copy of these is in-memory only and gets wiped on every restart —
+    // persisting them here too is what lets MetricsController's /metrics fallback show real
+    // values instead of "—" after a restart, as long as a scoring run has succeeded at least
+    // once. Same fetch-mutate-save upsert pattern DailyEngineSchedulerService uses on this same
+    // row for the job1/job2 date fields, so the two writers can't clobber each other's columns.
+    private void persistRunStats(int stocksScored, long durationMs) {
+        SchedulerState state = schedulerStateRepository.findById(SCHEDULER_STATE_ID)
+                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null));
+        state.setLastRunStocksScored(stocksScored);
+        state.setLastRunDurationMs(durationMs);
+        schedulerStateRepository.save(state);
     }
 
     private List<ScoredStock> scoreAll(List<String> symbols) {

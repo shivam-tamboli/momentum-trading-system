@@ -74,7 +74,7 @@ public class DailyEngineSchedulerService {
 
     private void persistState() {
         SchedulerState state = schedulerStateRepository.findById(STATE_ID)
-                .orElseGet(() -> new SchedulerState(STATE_ID, null, null, null));
+                .orElseGet(() -> new SchedulerState(STATE_ID, null, null, null, null, null));
         state.setJob1LastRunDate(job1LastRunDate);
         state.setJob1LastSuccessDate(job1LastSuccessDate);
         state.setJob2LastRunDate(job2LastRunDate);

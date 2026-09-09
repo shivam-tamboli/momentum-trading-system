@@ -200,8 +200,8 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
                   <Badge className={cn(ACTION_STYLES[trade.action])}>{trade.action}</Badge>
                 </TableCell>
                 <TableCell>
-                  <Badge className={cn('gap-1', STATUS_STYLES[trade.status])}>
-                    <StatusIcon className="h-3 w-3" />
+                  <Badge className={cn('h-6 gap-1.5 px-2.5 text-sm', STATUS_STYLES[trade.status])}>
+                    <StatusIcon className="h-3.5 w-3.5" />
                     {trade.status === 'PENDING' ? 'Pending — still processing' : trade.status}
                   </Badge>
                 </TableCell>

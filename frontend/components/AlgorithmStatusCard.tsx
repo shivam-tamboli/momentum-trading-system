@@ -62,8 +62,7 @@ export function AlgorithmStatusCard({ recommendations, isLoading }: AlgorithmSta
 
             <p className="text-xs text-muted-foreground">
               Next run:{' '}
-              <span className="font-mono tabular-nums">{formatNextRun(getNextScoringRun())}</span>{' '}
-              your time
+              <span className="font-mono tabular-nums">{formatNextRun(getNextScoringRun())}</span>
             </p>
           </>
         )}

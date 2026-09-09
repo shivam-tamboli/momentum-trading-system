@@ -51,6 +51,7 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
       <TableHeader>
         <TableRow>
           <TableHead>Symbol</TableHead>
+          <TableHead>Index</TableHead>
           <TableHead>Action</TableHead>
           <TableHead>Status</TableHead>
           <TableHead className="text-right">Amount</TableHead>
@@ -63,7 +64,7 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
         {isLoading &&
           Array.from({ length: 5 }).map((_, i) => (
             <TableRow key={i}>
-              {Array.from({ length: 7 }).map((__, j) => (
+              {Array.from({ length: 8 }).map((__, j) => (
                 <TableCell key={j}>
                   <Skeleton className="h-4 w-full" />
                 </TableCell>
@@ -73,7 +74,7 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
 
         {!isLoading && (!trades || trades.length === 0) && (
           <TableRow>
-            <TableCell colSpan={7} className="text-center text-muted-foreground">
+            <TableCell colSpan={8} className="text-center text-muted-foreground">
               No trades yet.
             </TableCell>
           </TableRow>
@@ -86,6 +87,7 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
               className={cn(trade.status === 'PENDING' && 'bg-pending/10')}
             >
               <TableCell className="font-medium">{trade.symbol}</TableCell>
+              <TableCell className="text-muted-foreground">{trade.index_filter ?? '—'}</TableCell>
               <TableCell>
                 <Badge className={cn(ACTION_STYLES[trade.action])}>{trade.action}</Badge>
               </TableCell>

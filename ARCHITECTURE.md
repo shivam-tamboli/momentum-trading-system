@@ -116,6 +116,7 @@ erDiagram
         string status
         decimal amount
         decimal price_per_share
+        string index_filter
     }
     scheduler_state {
         bigint id PK

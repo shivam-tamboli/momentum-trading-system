@@ -104,8 +104,9 @@ public class DailyTradingService {
             Map<String, Position> positionsBySymbol = positions.stream()
                     .collect(Collectors.toMap(Position::getSymbol, p -> p));
 
-            sellSymbols(userAlpacaAPI, user, toSell, positionsBySymbol);
-            buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size());
+            // Single index for this whole run — both sides of the diff belong to it equally.
+            sellSymbols(userAlpacaAPI, user, toSell, positionsBySymbol, user.getSelectedIndex());
+            buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size(), user.getSelectedIndex());
         } catch (MarketClosedException e) {
             log.info("Daily trading: skipping user {} — {}", user.getId(), e.getMessage());
         } catch (Exception e) {
@@ -135,6 +136,10 @@ public class DailyTradingService {
                     "Please set your investment amount in settings before switching index.");
         }
 
+        // Captured before the overwrite below — the positions about to be sold were bought under
+        // this index, not the new one, even though selected_index itself changes right away.
+        String previousIndex = user.getSelectedIndex();
+
         user.setSelectedIndex(newIndex);
         userRepository.save(user);
 
@@ -154,7 +159,7 @@ public class DailyTradingService {
 
             log.info("Index switch for user {}: selling all {} current holdings before buying {}",
                     userId, allHeld.size(), newIndex);
-            sellSymbols(userAlpacaAPI, user, allHeld, positionsBySymbol);
+            sellSymbols(userAlpacaAPI, user, allHeld, positionsBySymbol, previousIndex);
 
             List<DailyRecommendation> newTop5 =
                     dailyRecommendationRepository.findByFilterNameOrderByMomentumScoreDesc(newIndex);
@@ -162,7 +167,7 @@ public class DailyTradingService {
                     newTop5.stream().map(DailyRecommendation::getSymbol).collect(Collectors.toSet());
 
             log.info("Index switch for user {}: buying top {} for {}", userId, newSymbols.size(), newIndex);
-            buySymbols(userAlpacaAPI, user, newSymbols, newSymbols.size());
+            buySymbols(userAlpacaAPI, user, newSymbols, newSymbols.size(), newIndex);
         } catch (MarketClosedException e) {
             log.info("Index switch for user {}: preference saved as {} — market closed, trading "
                     + "deferred to the next scheduled run", userId, newIndex);
@@ -173,7 +178,7 @@ public class DailyTradingService {
     }
 
     private void sellSymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
-                              Map<String, Position> positionsBySymbol) {
+                              Map<String, Position> positionsBySymbol, String indexFilter) {
         symbols.parallelStream().forEach(symbol -> {
             Position position = positionsBySymbol.get(symbol);
             if (position == null) {
@@ -192,7 +197,7 @@ public class DailyTradingService {
                     BigDecimal filledQty = parseOrZero(filledOrder.getFilledQuantity());
                     BigDecimal amountReceived = filledPrice.multiply(filledQty);
                     saveTrade(user, symbol, ActionType.SELL, TradeStatus.FILLED, amountReceived, filledPrice,
-                            filledQty, order.getId());
+                            filledQty, order.getId(), indexFilter);
                 } else {
                     // Alpaca accepted the order but never confirmed a fill within the wait window.
                     // Record what's actually known — the order exists, and exactly how many shares
@@ -200,11 +205,12 @@ public class DailyTradingService {
                     log.warn("Daily trading: sell for {} (user {}) not confirmed filled within the "
                             + "wait window — recording as PENDING", symbol, user.getId());
                     saveTrade(user, symbol, ActionType.SELL, TradeStatus.PENDING, null, null, intendedQuantity,
-                            order.getId());
+                            order.getId(), indexFilter);
                 }
             } catch (Exception e) {
                 log.warn("Daily trading: sell failed for {} (user {}): {}", symbol, user.getId(), e.getMessage());
-                saveTrade(user, symbol, ActionType.SELL, TradeStatus.FAILED, null, null, intendedQuantity, null);
+                saveTrade(user, symbol, ActionType.SELL, TradeStatus.FAILED, null, null, intendedQuantity, null,
+                        indexFilter);
             }
         });
     }
@@ -218,7 +224,8 @@ public class DailyTradingService {
     // sizing off symbols.size() instead would dump most of the day's investment amount into
     // whichever handful of stocks happen to be new, since already-held stocks that stayed in the
     // top 5 aren't touched by this call at all.
-    private void buySymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols, int targetAllocationCount) {
+    private void buySymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols, int targetAllocationCount,
+                             String indexFilter) {
         if (symbols.isEmpty()) {
             return;
         }
@@ -275,7 +282,7 @@ public class DailyTradingService {
                     BigDecimal filledPrice = parseOrZero(filledOrder.getAverageFillPrice());
                     BigDecimal filledQty = parseOrZero(filledOrder.getFilledQuantity());
                     saveTrade(user, symbol, ActionType.BUY, TradeStatus.FILLED, amountPerStock, filledPrice,
-                            filledQty, order.getId());
+                            filledQty, order.getId(), indexFilter);
                 } else {
                     // The dollar amount we asked Alpaca to buy is known regardless of fill status —
                     // it's a notional order, so share count and price genuinely aren't determinable
@@ -283,19 +290,21 @@ public class DailyTradingService {
                     log.warn("Daily trading: buy for {} (user {}) not confirmed filled within the "
                             + "wait window — recording as PENDING", symbol, user.getId());
                     saveTrade(user, symbol, ActionType.BUY, TradeStatus.PENDING, amountPerStock, null, null,
-                            order.getId());
+                            order.getId(), indexFilter);
                 }
             } catch (Exception e) {
                 log.warn("Daily trading: buy failed for {} (user {}): {}", symbol, user.getId(), e.getMessage());
-                saveTrade(user, symbol, ActionType.BUY, TradeStatus.FAILED, amountPerStock, null, null, null);
+                saveTrade(user, symbol, ActionType.BUY, TradeStatus.FAILED, amountPerStock, null, null, null,
+                        indexFilter);
             }
         });
     }
 
     private void saveTrade(User user, String symbol, ActionType action, TradeStatus status, BigDecimal amount,
-                            BigDecimal pricePerShare, BigDecimal quantity, String alpacaOrderId) {
+                            BigDecimal pricePerShare, BigDecimal quantity, String alpacaOrderId,
+                            String indexFilter) {
         DailyTrade trade = new DailyTrade(null, user, symbol, action, status, amount, pricePerShare, quantity,
-                alpacaOrderId, null);
+                alpacaOrderId, indexFilter, null);
         dailyTradeRepository.save(trade);
     }
 

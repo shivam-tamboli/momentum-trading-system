@@ -36,6 +36,8 @@ export interface DailyTradeItem {
   price_per_share: number | null;
   quantity: number | null;
   traded_at: string;
+  // Null for trades placed before this field existed — not backfilled with a guess.
+  index_filter: string | null;
 }
 
 export const SELECTABLE_INDEXES = ['S&P 500', 'S&P 400', 'S&P 600', 'NASDAQ 100', 'FULL_MARKET'] as const;

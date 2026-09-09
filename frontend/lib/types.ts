@@ -36,6 +36,16 @@ export interface IndexPriceHistoryResponse {
 // the same {date, close} shape as IndexPricePoint.
 export type StockPriceHistoryResponse = Record<string, IndexPricePoint[]>;
 
+export interface BenchmarkResponse {
+  selected_index: string | null;
+  // Null when there's no single-ETF proxy for the tracked index (no index chosen yet, or
+  // FULL_MARKET) or when there isn't yet enough portfolio history to compute a return.
+  index_symbol: string | null;
+  period_start: string | null;
+  portfolio_return_percent: number | null;
+  index_return_percent: number | null;
+}
+
 export interface IndexSwitchHistoryItem {
   // Null for a user's very first index pick — there was no prior selection to record.
   previous_index: string | null;

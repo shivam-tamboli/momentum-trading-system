@@ -18,7 +18,6 @@ import java.time.LocalDate;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
 
 /**
  * Real historical price data for the index a user tracks — not user-owned data, just public
@@ -30,16 +29,6 @@ public class IndexPriceController {
 
     private static final int HISTORY_DAYS = 30;
 
-    // Each selectable index is tracked via its most liquid, widely-used ETF — real, tradable
-    // proxies for the index itself, since Alpaca's market data endpoint serves equities/ETFs, not
-    // raw index values.
-    private static final Map<String, String> INDEX_TO_ETF = Map.of(
-            IndexConstituentService.SP500, "SPY",
-            IndexConstituentService.SP400, "MDY",
-            IndexConstituentService.SP600, "SPSM",
-            IndexConstituentService.NASDAQ100, "QQQ"
-    );
-
     private final AlpacaAPI systemAlpacaAPI;
 
     public IndexPriceController(AlpacaAPI systemAlpacaAPI) {
@@ -48,7 +37,7 @@ public class IndexPriceController {
 
     @GetMapping("/index-price-history")
     public ResponseEntity<?> getIndexPriceHistory(@RequestParam String index) {
-        String etfSymbol = INDEX_TO_ETF.get(index);
+        String etfSymbol = IndexConstituentService.INDEX_TO_ETF.get(index);
         if (etfSymbol == null) {
             return ResponseEntity.status(HttpStatus.BAD_REQUEST)
                     .body(new ErrorResponse("Unknown index: " + index));

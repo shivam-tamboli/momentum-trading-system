@@ -50,7 +50,13 @@ export function AlgorithmStatusCard({ recommendations, isLoading }: AlgorithmSta
                   not run yet.
                 </>
               ) : (
-                <>✅ Today&apos;s scores are live</>
+                <span className="flex items-center gap-2">
+                  <span className="relative flex h-2 w-2">
+                    <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gain opacity-75" />
+                    <span className="relative inline-flex h-2 w-2 rounded-full bg-gain" />
+                  </span>
+                  Today&apos;s scores are live
+                </span>
               )}
             </div>
 

@@ -1,5 +1,8 @@
+'use client';
+
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
+import { useCountUp } from '@/lib/useCountUp';
 import type { AccountResponse } from '@/lib/types';
 
 const currency = new Intl.NumberFormat('en-US', {
@@ -13,6 +16,7 @@ interface AccountSummaryProps {
 }
 
 export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
+  const animatedPortfolioValue = useCountUp(account?.portfolio_value);
   const secondaryStats = [
     { label: 'Cash', value: account?.cash },
     { label: 'Buying Power', value: account?.buying_power },
@@ -31,7 +35,7 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
             <Skeleton className="h-12 w-48" />
           ) : (
             <p className="font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
-              {currency.format(account.portfolio_value)}
+              {currency.format(animatedPortfolioValue ?? account.portfolio_value)}
             </p>
           )}
         </CardContent>

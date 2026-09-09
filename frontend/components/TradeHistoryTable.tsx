@@ -1,3 +1,4 @@
+import { Receipt } from 'lucide-react';
 import {
   Table,
   TableBody,
@@ -8,6 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
+import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
 import type { DailyTradeItem } from '@/lib/types';
 
@@ -74,8 +76,8 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
 
         {!isLoading && (!trades || trades.length === 0) && (
           <TableRow>
-            <TableCell colSpan={8} className="text-center text-muted-foreground">
-              No trades yet.
+            <TableCell colSpan={8}>
+              <EmptyState icon={Receipt} message="No trades yet." />
             </TableCell>
           </TableRow>
         )}

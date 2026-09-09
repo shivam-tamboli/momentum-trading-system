@@ -54,10 +54,14 @@ public class AccountController {
         try {
             Account account = userAlpacaAPI.account().get();
 
+            // lastEquity is Alpaca's own record of the previous trading day's closing equity —
+            // real, not derived or estimated — so the frontend can show a day-over-day delta
+            // without needing any historical snapshot storage of our own.
             AccountResponse response = new AccountResponse(
                     new BigDecimal(account.getCash()),
                     new BigDecimal(account.getBuyingPower()),
-                    new BigDecimal(account.getPortfolioValue())
+                    new BigDecimal(account.getPortfolioValue()),
+                    new BigDecimal(account.getLastEquity())
             );
 
             return ResponseEntity.ok(response);
@@ -107,7 +111,8 @@ public class AccountController {
         return alpacaConfig.createUserAlpacaAPI(apiKey, apiSecret);
     }
 
-    public record AccountResponse(BigDecimal cash, BigDecimal buyingPower, BigDecimal portfolioValue) {
+    public record AccountResponse(BigDecimal cash, BigDecimal buyingPower, BigDecimal portfolioValue,
+                                   BigDecimal lastEquity) {
     }
 
     public record PositionResponse(String symbol, BigDecimal qty, BigDecimal avgEntryPrice,

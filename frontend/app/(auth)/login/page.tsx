@@ -14,6 +14,7 @@ import {
   CardHeader,
   CardTitle,
 } from '@/components/ui/card';
+import { AuthLayout } from '@/components/AuthLayout';
 
 export default function LoginPage() {
   const router = useRouter();
@@ -46,20 +47,7 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-sm space-y-6">
-        <div className="flex flex-col items-center gap-3 text-center">
-          <div className="flex h-11 w-11 items-center justify-center rounded-md bg-primary font-mono text-lg font-bold text-primary-foreground">
-            M
-          </div>
-          <div>
-            <p className="font-mono text-[11px] tracking-widest text-muted-foreground uppercase">
-              Paper Trading Terminal
-            </p>
-            <h1 className="mt-1 text-xl font-semibold">Momentum</h1>
-          </div>
-        </div>
-
+    <AuthLayout eyebrow="Paper Trading Terminal" title="Momentum">
         <Card className="w-full">
           <CardHeader>
             <CardTitle>Sign in</CardTitle>
@@ -105,7 +93,6 @@ export default function LoginPage() {
           </form>
           </CardContent>
         </Card>
-      </div>
-    </div>
+    </AuthLayout>
   );
 }

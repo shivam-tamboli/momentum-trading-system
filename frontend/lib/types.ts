@@ -12,9 +12,11 @@ export interface ErrorResponse {
 
 export interface PositionItem {
   symbol: string;
+  name: string;
   qty: number;
   avg_entry_price: number;
   current_price: number;
+  market_value: number;
   unrealized_pl: number;
   unrealized_pl_percent: number;
 }

@@ -12,6 +12,7 @@ I built a system that trades stocks on its own, every day, based on price moment
 - **Market data + execution** — Alpaca (alpaca-java SDK)
 - **Auth** — Supabase Auth
 - **Frontend** — Next.js 16, React 19, Tailwind CSS 4, shadcn/ui
+- **Charts** — lightweight-charts (TradingView)
 - **Data fetching** — TanStack React Query
 - **Index data pipeline** — Python script + GitHub Actions
 - **Hosting** — Render (backend), Vercel (frontend)

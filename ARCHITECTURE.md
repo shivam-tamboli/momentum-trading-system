@@ -269,12 +269,15 @@ This also lets the backend's own in-process scheduler work as a redundant backup
 
 ```mermaid
 flowchart LR
-    PR[Pull request] -->|preview build| Vercel1[Vercel preview]
-    PR -->|merge to main| Main[main branch]
-    Main -->|auto-deploy| Vercel2[Vercel: frontend]
-    Main -->|auto-deploy| Render[Render: backend]
+    PR[Pull request] --> CI["ci.yml: build-backend + build-frontend"]
+    PR -->|preview build| Vercel1[Vercel preview]
+    CI -->|required check| Merge[Merge to main]
+    Merge --> Vercel2[Vercel: frontend]
+    Merge --> Render[Render: backend]
 ```
 
-No separate build server — Vercel and Render both watch the GitHub repo directly and deploy on push, no config beyond connecting the repo. A pull request gets its own Vercel preview URL and a status check before merge; main branch pushes go straight to production on both sides. There's no automated test suite behind this — verification is manual: `mvn package` and `npm run build`/`lint` before every merge, plus hitting the real deployed endpoints with a real JWT afterward to confirm the change actually works, not just that it compiles.
+No separate build server — Vercel and Render both watch the GitHub repo directly and deploy on push, no config beyond connecting the repo. A pull request gets its own Vercel preview URL and a status check before merge; main branch pushes go straight to production on both sides.
+
+`.github/workflows/ci.yml` runs two jobs in parallel on every pull request and every push to `main`: `build-backend` (Java 21, `mvn clean package -DskipTests`) and `build-frontend` (Node 20, `npm ci && npm run build`). Both are required status checks on `main` — a PR can't merge if either fails. This confirms the code builds, not that it behaves correctly — there's still no automated test suite, so behavior gets verified manually: hitting the real deployed endpoints with a real JWT after merge to confirm a change actually works, not just that it compiles.
 
 The three scheduled GitHub Actions workflows (`daily-trading-cron.yml`, `keep-alive.yml`, `update-index-constituents.yml`) are the closest thing to a third CI system here — cron-triggered jobs that call the live backend or open a PR against this repo, not build/test automation.

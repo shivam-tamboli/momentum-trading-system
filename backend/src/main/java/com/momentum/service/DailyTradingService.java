@@ -8,8 +8,10 @@ import com.momentum.model.DailyTrade;
 import com.momentum.model.User;
 import com.momentum.model.enums.ActionType;
 import com.momentum.model.enums.TradeStatus;
+import com.momentum.model.SchedulerState;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.repository.DailyTradeRepository;
+import com.momentum.repository.SchedulerStateRepository;
 import com.momentum.repository.UserRepository;
 import com.momentum.util.EncryptionUtil;
 import net.jacobpeterson.alpaca.AlpacaAPI;
@@ -27,6 +29,7 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.HashSet;
@@ -48,29 +51,100 @@ import java.util.stream.Collectors;
 public class DailyTradingService {
 
     private static final Logger log = LoggerFactory.getLogger(DailyTradingService.class);
+    private static final Long SCHEDULER_STATE_ID = 1L;
 
     private final UserRepository userRepository;
     private final DailyRecommendationRepository dailyRecommendationRepository;
     private final DailyTradeRepository dailyTradeRepository;
+    private final SchedulerStateRepository schedulerStateRepository;
     private final AlpacaConfig alpacaConfig;
+    private final AlpacaAPI systemAlpacaAPI;
     private final EncryptionUtil encryptionUtil;
     private final EmailService emailService;
 
     public DailyTradingService(UserRepository userRepository,
                                 DailyRecommendationRepository dailyRecommendationRepository,
                                 DailyTradeRepository dailyTradeRepository,
+                                SchedulerStateRepository schedulerStateRepository,
                                 AlpacaConfig alpacaConfig,
+                                AlpacaAPI systemAlpacaAPI,
                                 EncryptionUtil encryptionUtil,
                                 EmailService emailService) {
         this.userRepository = userRepository;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.dailyTradeRepository = dailyTradeRepository;
+        this.schedulerStateRepository = schedulerStateRepository;
         this.alpacaConfig = alpacaConfig;
+        this.systemAlpacaAPI = systemAlpacaAPI;
         this.encryptionUtil = encryptionUtil;
         this.emailService = emailService;
     }
 
-    public void runDailyTrading() {
+    public enum TradingRunOutcome { COMPLETED, ALREADY_DONE, MARKET_CLOSED }
+
+    /**
+     * The single safe entry point for triggering Job 2 — used by both the in-process scheduler's
+     * retry loop and the admin endpoint, so "already ran today" is a real, DB-backed guard no
+     * matter which path calls it, not just an in-memory flag one specific caller happens to keep.
+     * Checks the market's own clock (not a caller-supplied guess) and scheduler_state's
+     * job2_last_run_date before doing anything — safe to call as often as anyone likes.
+     */
+    public TradingRunOutcome runDailyTradingIfNeeded() {
+        Clock clock;
+        try {
+            clock = systemAlpacaAPI.clock().get();
+        } catch (AlpacaClientException e) {
+            log.error("Daily trading: failed to fetch market clock, treating as not-open: {}", e.getMessage(), e);
+            return TradingRunOutcome.MARKET_CLOSED;
+        }
+
+        LocalDate tradingDay = clock.getTimestamp().toLocalDate();
+        SchedulerState state = schedulerStateRepository.findById(SCHEDULER_STATE_ID)
+                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null, null));
+
+        if (tradingDay.equals(state.getJob2LastRunDate())) {
+            log.info("Daily trading: {} already completed — skipping", tradingDay);
+            return TradingRunOutcome.ALREADY_DONE;
+        }
+
+        if (!Boolean.TRUE.equals(clock.getIsOpen())) {
+            log.info("Daily trading: market is closed — skipping this attempt");
+            return TradingRunOutcome.MARKET_CLOSED;
+        }
+
+        log.info("Daily trading: running for {}", tradingDay);
+        runDailyTrading();
+
+        state.setJob2LastRunDate(tradingDay);
+        schedulerStateRepository.save(state);
+        log.info("Daily trading: completed for {}", tradingDay);
+        return TradingRunOutcome.COMPLETED;
+    }
+
+    // True if today's Job 2 batch has already completed — used by the scheduler to decide whether
+    // a "trading window missed" alert is actually warranted once the market closes.
+    public boolean hasCompletedToday(LocalDate today) {
+        return schedulerStateRepository.findById(SCHEDULER_STATE_ID)
+                .map(SchedulerState::getJob2LastRunDate)
+                .map(today::equals)
+                .orElse(false);
+    }
+
+    // Sent once, to every eligible user, when the market closes with Job 2 never having
+    // completed that day — see DailyEngineSchedulerService.maybeAlertJob2Missed.
+    public void notifyTradingWindowMissed() {
+        List<User> eligibleUsers = userRepository.findAll().stream()
+                .filter(this::hasApiKey)
+                .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
+                .toList();
+
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        for (User user : eligibleUsers) {
+            emailService.sendTradingWindowMissedEmail(user, now);
+        }
+    }
+
+    private void runDailyTrading() {
         List<User> eligibleUsers = userRepository.findAll().stream()
                 .filter(this::hasApiKey)
                 .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
@@ -114,9 +188,12 @@ public class DailyTradingService {
             List<DailyTrade> sold = sellSymbols(userAlpacaAPI, user, toSell, positionsBySymbol, user.getSelectedIndex());
             List<DailyTrade> bought = buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size(), user.getSelectedIndex());
 
+            BigDecimal portfolioValue = fetchPortfolioValue(userAlpacaAPI, user.getId());
             if (!sold.isEmpty() || !bought.isEmpty()) {
-                BigDecimal portfolioValue = fetchPortfolioValue(userAlpacaAPI, user.getId());
                 emailService.sendPortfolioRebalancedEmail(user, bought, sold, portfolioValue,
+                        LocalDateTime.now(ZoneOffset.UTC));
+            } else {
+                emailService.sendNoRebalancingNeededEmail(user, user.getSelectedIndex(), top5, portfolioValue,
                         LocalDateTime.now(ZoneOffset.UTC));
             }
         } catch (MarketClosedException e) {

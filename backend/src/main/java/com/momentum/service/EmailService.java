@@ -138,6 +138,36 @@ public class EmailService {
         send(user.getEmail(), subject, body.toString());
     }
 
+    // ---- No rebalancing needed: holdings already match today's top 5, sent after Job 2 ----
+
+    public void sendNoRebalancingNeededEmail(User user, String indexName, List<DailyRecommendation> holdings,
+                                              BigDecimal portfolioValue, LocalDateTime asOfUtc) {
+        String displayIndex = displayIndexName(indexName);
+        String subject = "No Rebalancing Needed | " + dateLabel(asOfUtc);
+
+        StringBuilder body = new StringBuilder();
+        body.append("Your portfolio already holds today's top 5 ").append(displayIndex)
+                .append(" stocks. No trades were placed.\n\n");
+        body.append("Current holdings:\n");
+        for (DailyRecommendation rec : holdings) {
+            body.append("  ").append(rec.getSymbol()).append(" (").append(rec.getName()).append(")\n");
+        }
+        body.append("\nPortfolio value: ").append(formatMoney(portfolioValue)).append("\n");
+
+        send(user.getEmail(), subject, body.toString());
+    }
+
+    // ---- Trading window missed: market closed before Job 2 ever completed that day ----
+
+    public void sendTradingWindowMissedEmail(User user, LocalDateTime asOfUtc) {
+        String subject = "Trading Window Missed | " + dateLabel(asOfUtc);
+
+        String body = "The market closed before today's rebalancing could execute. Your portfolio was not "
+                + "changed. Trading will resume tomorrow at market open.\n";
+
+        send(user.getEmail(), subject, body);
+    }
+
     // ---- Email 4: critical trade failure, sent immediately when a trade's status becomes FAILED ----
 
     public void sendTradeFailedEmail(User user, String symbol, ActionType action, LocalDateTime failedAtUtc) {

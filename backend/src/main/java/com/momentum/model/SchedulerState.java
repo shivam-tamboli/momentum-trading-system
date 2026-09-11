@@ -43,4 +43,11 @@ public class SchedulerState {
 
     @Column(name = "last_run_stocks_scored")
     private Integer lastRunStocksScored;
+
+    // The date the "market closed before Job 2 ever ran" alert was last sent — so a missed
+    // trading day only triggers one email per user, not one on every 60-second poll for the rest
+    // of the day. Owned by DailyEngineSchedulerService; job1_last_run_date/job1_last_success_date
+    // are also its fields, job_2_last_run_date is DailyTradingService's own (see that class).
+    @Column(name = "job2_missed_alert_date")
+    private LocalDate job2MissedAlertDate;
 }

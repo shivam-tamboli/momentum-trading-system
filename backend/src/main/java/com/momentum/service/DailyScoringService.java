@@ -2,8 +2,10 @@ package com.momentum.service;
 
 import com.momentum.model.DailyRecommendation;
 import com.momentum.model.SchedulerState;
+import com.momentum.model.User;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.repository.SchedulerStateRepository;
+import com.momentum.repository.UserRepository;
 import net.jacobpeterson.alpaca.AlpacaAPI;
 import net.jacobpeterson.alpaca.model.endpoint.assets.Asset;
 import net.jacobpeterson.alpaca.model.endpoint.assets.enums.AssetClass;
@@ -23,6 +25,8 @@ import java.math.BigDecimal;
 import java.math.MathContext;
 import java.math.RoundingMode;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.time.ZonedDateTime;
 import java.util.ArrayList;
 import java.util.Comparator;
@@ -59,6 +63,8 @@ public class DailyScoringService {
     private final DailyRecommendationRepository dailyRecommendationRepository;
     private final MetricsService metricsService;
     private final SchedulerStateRepository schedulerStateRepository;
+    private final UserRepository userRepository;
+    private final EmailService emailService;
     private final TransactionTemplate transactionTemplate;
 
     public DailyScoringService(AlpacaAPI systemAlpacaAPI,
@@ -66,12 +72,16 @@ public class DailyScoringService {
                                 DailyRecommendationRepository dailyRecommendationRepository,
                                 MetricsService metricsService,
                                 SchedulerStateRepository schedulerStateRepository,
+                                UserRepository userRepository,
+                                EmailService emailService,
                                 PlatformTransactionManager transactionManager) {
         this.systemAlpacaAPI = systemAlpacaAPI;
         this.indexConstituentService = indexConstituentService;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.metricsService = metricsService;
         this.schedulerStateRepository = schedulerStateRepository;
+        this.userRepository = userRepository;
+        this.emailService = emailService;
         // A plain TransactionTemplate rather than @Transactional: this class calls the
         // delete+save block on itself (self-invocation), which Spring's proxy-based @Transactional
         // would silently ignore. TransactionTemplate wraps just those two calls — not the whole
@@ -174,6 +184,15 @@ public class DailyScoringService {
             metricsService.recordRunSuccess(scored.size(), durationMs);
             persistRunStats(scored.size(), durationMs);
             log.info("Daily scoring complete in {}ms, {} recommendation rows stored", durationMs, toSave.size());
+
+            Map<String, List<DailyRecommendation>> byFilter = Map.of(
+                    IndexConstituentService.SP500, sp500,
+                    IndexConstituentService.NASDAQ100, nasdaq100,
+                    IndexConstituentService.SP400, sp400,
+                    IndexConstituentService.SP600, sp600,
+                    FULL_MARKET, fullMarket
+            );
+            sendTopFiveEmails(byFilter);
         } catch (Exception e) {
             long durationMs = System.currentTimeMillis() - startTime;
             metricsService.recordRunFailure(e.getMessage(), durationMs);
@@ -192,6 +211,25 @@ public class DailyScoringService {
         state.setLastRunStocksScored(stocksScored);
         state.setLastRunDurationMs(durationMs);
         schedulerStateRepository.save(state);
+    }
+
+    // Best-effort — a mail failure for one user must never affect scoring, and never block the
+    // next user's email either (see EmailService.send's own try/catch).
+    private void sendTopFiveEmails(Map<String, List<DailyRecommendation>> byFilter) {
+        LocalDateTime scoredAt = LocalDateTime.now(ZoneOffset.UTC);
+
+        List<User> eligibleUsers = userRepository.findAll().stream()
+                .filter(u -> u.getAlpacaApiKeyEncrypted() != null && !u.getAlpacaApiKeyEncrypted().isBlank())
+                .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
+                .toList();
+
+        for (User user : eligibleUsers) {
+            List<DailyRecommendation> top5 = byFilter.get(user.getSelectedIndex());
+            if (top5 == null || top5.isEmpty()) {
+                continue;
+            }
+            emailService.sendTopFiveEmail(user, user.getSelectedIndex(), top5, scoredAt);
+        }
     }
 
     private List<ScoredStock> scoreAll(List<String> symbols) {

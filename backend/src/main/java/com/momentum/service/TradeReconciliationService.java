@@ -15,6 +15,8 @@ import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.EnumSet;
 import java.util.List;
 import java.util.Set;
@@ -41,13 +43,16 @@ public class TradeReconciliationService {
     private final DailyTradeRepository dailyTradeRepository;
     private final AlpacaConfig alpacaConfig;
     private final EncryptionUtil encryptionUtil;
+    private final EmailService emailService;
 
     public TradeReconciliationService(DailyTradeRepository dailyTradeRepository,
                                        AlpacaConfig alpacaConfig,
-                                       EncryptionUtil encryptionUtil) {
+                                       EncryptionUtil encryptionUtil,
+                                       EmailService emailService) {
         this.dailyTradeRepository = dailyTradeRepository;
         this.alpacaConfig = alpacaConfig;
         this.encryptionUtil = encryptionUtil;
+        this.emailService = emailService;
     }
 
     // Fixed wall-clock time, unlike the daily engine's Job 1/Job 2 — reconciliation doesn't need
@@ -109,6 +114,8 @@ public class TradeReconciliationService {
                 } else if (FAILED_STATUSES.contains(status)) {
                     trade.setStatus(TradeStatus.FAILED);
                     dailyTradeRepository.save(trade);
+                    emailService.sendTradeFailedEmail(trade.getUser(), trade.getSymbol(), trade.getAction(),
+                            LocalDateTime.now(ZoneOffset.UTC));
                     failed++;
                 } else {
                     // Genuinely still open (new/accepted/pending_new/etc.) — rare this long after

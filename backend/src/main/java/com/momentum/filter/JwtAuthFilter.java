@@ -42,7 +42,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return request.getRequestURI().startsWith("/admin/");
+        return request.getRequestURI().startsWith("/admin/") || request.getRequestURI().equals("/health");
     }
 
     @Override

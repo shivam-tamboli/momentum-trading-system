@@ -34,6 +34,10 @@ public class SecurityConfig {
                 // JWT auth — permitAll() here just means Spring Security itself doesn't also
                 // demand a Supabase-authenticated principal for these paths.
                 .requestMatchers("/admin/**").permitAll()
+                // /health is the public liveness endpoint external uptime pingers (UptimeRobot)
+                // hit — it must never require a Supabase JWT, or every ping just wakes the dyno
+                // to return a 401 without actually resetting Render's idle timer usefully.
+                .requestMatchers("/health").permitAll()
                 .anyRequest().authenticated()
             )
             .addFilterBefore(adminAuthFilter, UsernamePasswordAuthenticationFilter.class)

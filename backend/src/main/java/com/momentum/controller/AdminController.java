@@ -41,8 +41,8 @@ public class AdminController {
     @PostMapping("/run-daily-trading")
     public ResponseEntity<String> runDailyTrading() {
         try {
-            dailyTradingService.runDailyTrading();
-            return ResponseEntity.ok("Daily trading run completed.");
+            DailyTradingService.TradingRunOutcome outcome = dailyTradingService.runDailyTradingIfNeeded();
+            return ResponseEntity.ok("Daily trading run: " + outcome);
         } catch (Exception e) {
             return ResponseEntity.status(500).body("Daily trading failed: " + e.getMessage());
         }

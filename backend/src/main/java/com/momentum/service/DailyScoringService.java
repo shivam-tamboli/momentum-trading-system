@@ -207,7 +207,7 @@ public class DailyScoringService {
     // row for the job1/job2 date fields, so the two writers can't clobber each other's columns.
     private void persistRunStats(int stocksScored, long durationMs) {
         SchedulerState state = schedulerStateRepository.findById(SCHEDULER_STATE_ID)
-                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null));
+                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null, null));
         state.setLastRunStocksScored(stocksScored);
         state.setLastRunDurationMs(durationMs);
         schedulerStateRepository.save(state);

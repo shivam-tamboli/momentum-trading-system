@@ -1,19 +1,24 @@
 name: Keep backend awake
 
-# Pings the live backend every 5 minutes, 24/7, so Render's free tier never spins it down from
-# idle. This is a best-effort convenience, not a guarantee — the daily-trading-cron workflow
-# doesn't depend on this to work (it wakes the backend itself on each call), and the frontend's
-# ConnectingIndicator covers the case where the backend is asleep anyway. A missed ping here is
-# silent by design: the next one just fires 5 minutes later.
+# Two targeted wake-up pings, weekdays only — not a general "stay warm 24/7" workflow anymore.
+# UptimeRobot (see ARCHITECTURE.md) is the actual reliable keep-alive; GitHub Actions never
+# honored a high-frequency */5 schedule reliably (measured gaps of 2-5 hours), so trying to use
+# it for constant uptime was never realistic. What GitHub Actions *does* reliably fire is a
+# low-frequency, fixed-time schedule — so this now does exactly two pings a day, each timed to
+# land 15 minutes ahead of something that actually needs the backend awake:
+#
+#   10:15 UTC (3:45 PM IST) — 15 minutes before Job 1 (daily scoring, ~10:30 UTC)
+#   13:15 UTC (6:45 PM IST) — 15 minutes before market open / Job 2 (~13:30 UTC)
 #
 # Hits /health specifically — a public, auth-free endpoint (see HealthController) — rather than
-# the bare root, which requires a Supabase JWT and only ever returned 401. A 401 still reaches
-# the server and resets Render's idle timer either way, but /health gives a real 200 to confirm
-# the ping actually worked, and matches what UptimeRobot's monitor is configured to hit too.
+# the bare root, which requires a Supabase JWT and only ever returned 401. A missed ping here is
+# silent by design: daily-trading-cron.yml wakes the backend itself either way when it calls the
+# admin endpoints directly, so this is a head start, not a dependency.
 
 on:
   schedule:
-    - cron: "*/5 * * * *"
+    - cron: "15 10 * * 1-5"
+    - cron: "15 13 * * 1-5"
   workflow_dispatch: {}
 
 jobs:

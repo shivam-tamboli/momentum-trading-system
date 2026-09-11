@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
-import { formatFullDateTime, formatRelativeDate } from '@/lib/freshness';
+import { formatFullDateTime, formatRelativeDate, parseBackendTimestamp } from '@/lib/freshness';
 import type { DailyTradeItem } from '@/lib/types';
 
 const ACTION_STYLES: Record<DailyTradeItem['action'], string> = {
@@ -96,6 +96,10 @@ function buildRenderItems(trades: DailyTradeItem[]): RenderItem[] {
   return items;
 }
 
+function isToday(tradedAt: string): boolean {
+  return parseBackendTimestamp(tradedAt).toDateString() === new Date().toDateString();
+}
+
 interface TradeHistoryTableProps {
   trades: DailyTradeItem[] | undefined;
   isLoading: boolean;
@@ -103,6 +107,10 @@ interface TradeHistoryTableProps {
 
 export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps) {
   const items = trades ? buildRenderItems(trades) : [];
+  // Only relevant once there's history at all — a brand-new account with zero trades ever gets
+  // the generic empty state below instead, not a claim that holdings already match anything.
+  const hasHistory = !!trades && trades.length > 0;
+  const hasTradeToday = hasHistory && trades!.some((t) => isToday(t.traded_at));
 
   return (
     <Table>
@@ -137,6 +145,16 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
                 icon={Receipt}
                 message="No trades yet. Your auto-trades will appear here after market open."
               />
+            </TableCell>
+          </TableRow>
+        )}
+
+        {!isLoading && hasHistory && !hasTradeToday && (
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={8} className="py-3">
+              <div className="rounded-md border border-gain/50 bg-gain/10 px-3 py-2 text-center text-sm font-medium text-gain">
+                No rebalancing today — your holdings already match today&apos;s top 5.
+              </div>
             </TableCell>
           </TableRow>
         )}

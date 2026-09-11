@@ -13,14 +13,26 @@ export function parseBackendTimestamp(value: string): Date {
   return new Date(hasTimezone ? value : `${value}Z`);
 }
 
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+// Pure elapsed-time check — deliberately not a calendar-day comparison. Comparing calendar days
+// (even in UTC) breaks the moment a run happens very late and crosses a day boundary: a run from
+// 45 minutes ago would read as "stale" just because the clock ticked past midnight since. Elapsed
+// milliseconds don't care what timezone anyone's in or where a day boundary falls, so this can't
+// misfire the way the old toDateString() comparison did (which produced an actual "Scores are
+// from Tomorrow" bug when a run finished late enough to cross local midnight).
 export function isStale(scoredAt: string): boolean {
-  return parseBackendTimestamp(scoredAt).toDateString() !== new Date().toDateString();
+  const elapsed = Date.now() - parseBackendTimestamp(scoredAt).getTime();
+  return elapsed > ONE_DAY_MS;
 }
 
 function isSameLocalDay(a: Date, b: Date): boolean {
   return a.toDateString() === b.toDateString();
 }
 
+// For a date that's always in the future (next scheduled run) — "Tomorrow" is correct here and
+// expected. Never use this for a past timestamp (scored_at, traded_at, etc.) — see
+// pastRelativeDayLabel below, which deliberately has no Tomorrow case at all.
 function relativeDayLabel(date: Date, now: Date = new Date()): string {
   if (isSameLocalDay(date, now)) return 'Today';
 
@@ -31,6 +43,19 @@ function relativeDayLabel(date: Date, now: Date = new Date()): string {
   const tomorrow = new Date(now);
   tomorrow.setDate(tomorrow.getDate() + 1);
   if (isSameLocalDay(date, tomorrow)) return 'Tomorrow';
+
+  return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
+}
+
+// For a timestamp that's always in the past (scored_at, traded_at, switched_at, ...). No Tomorrow
+// case exists here at all — a run that finished late and crossed local midnight just falls
+// through to the plain formatted date instead of the misleading "Tomorrow" label.
+function pastRelativeDayLabel(date: Date, now: Date = new Date()): string {
+  if (isSameLocalDay(date, now)) return 'Today';
+
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+  if (isSameLocalDay(date, yesterday)) return 'Yesterday';
 
   return new Intl.DateTimeFormat('en-US', { month: 'short', day: 'numeric' }).format(date);
 }
@@ -56,15 +81,16 @@ export function formatDualTimezone(date: Date): string {
   return `${IST_TIME_FORMATTER.format(date)} IST (${ET_TIME_FORMATTER.format(date)} ET)`;
 }
 
-// "Today at 4:01 PM IST (10:31 AM ET)" / "Yesterday at ..." / "Sep 3 at ..."
+// "Today at 4:01 PM IST (10:31 AM ET)" / "Yesterday at ..." / "Sep 3 at ..." — never "Tomorrow":
+// scored_at is always a past event, however late in the day it finished.
 export function formatScoredAt(scoredAt: string): string {
   const date = parseBackendTimestamp(scoredAt);
-  return `${relativeDayLabel(date)} at ${formatDualTimezone(date)}`;
+  return `${pastRelativeDayLabel(date)} at ${formatDualTimezone(date)}`;
 }
 
 // "Sep 3" / "Yesterday" — used in the stale-warning sentence, where the time isn't needed.
 export function formatRelativeDate(scoredAt: string): string {
-  return relativeDayLabel(parseBackendTimestamp(scoredAt));
+  return pastRelativeDayLabel(parseBackendTimestamp(scoredAt));
 }
 
 // "Sep 7, 2026, 4:01 PM IST (10:31 AM ET)"

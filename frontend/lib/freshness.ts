@@ -74,6 +74,31 @@ export function formatExactDateTime(scoredAt: string): string {
   return `${dateLabel}, ${formatDualTimezone(date)}`;
 }
 
+// "Today, Sep 10, 2026 at 1:15 PM IST (3:45 PM ET)" / "Yesterday, Sep 9, 2026 at ..." /
+// "Sep 3, 2026 at ...". Unlike formatScoredAt, the full date is always present — a "Today"/
+// "Yesterday" prefix is extra context, never a replacement for it, so a trade, switch, or run
+// from days ago can never be misread as something that just happened.
+export function formatFullDateTime(value: string): string {
+  const date = parseBackendTimestamp(value);
+  const now = new Date();
+  const yesterday = new Date(now);
+  yesterday.setDate(yesterday.getDate() - 1);
+
+  const prefix = isSameLocalDay(date, now)
+    ? 'Today, '
+    : isSameLocalDay(date, yesterday)
+      ? 'Yesterday, '
+      : '';
+
+  const dateLabel = new Intl.DateTimeFormat('en-US', {
+    month: 'short',
+    day: 'numeric',
+    year: 'numeric',
+  }).format(date);
+
+  return `${prefix}${dateLabel} at ${formatDualTimezone(date)}`;
+}
+
 // Scoring runs weekdays at 10:30 UTC (6:30 AM ET, 3 hours before the regular 9:30 AM market
 // open) via .github/workflows/daily-trading-cron.yml. This is a UI estimate only — it doesn't
 // know about market holidays or early closes, so treat it as "roughly when," not a guarantee.

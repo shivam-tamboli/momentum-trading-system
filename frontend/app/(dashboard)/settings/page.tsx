@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { cn } from '@/lib/utils';
-import { formatExactDateTime } from '@/lib/freshness';
+import { formatFullDateTime } from '@/lib/freshness';
 import {
   Card,
   CardContent,
@@ -471,7 +471,7 @@ function SwitchHistoryCard() {
               query.data?.map((entry, i) => (
                 <TableRow key={i}>
                   <TableCell className="text-muted-foreground">
-                    {formatExactDateTime(entry.switched_at)}
+                    {formatFullDateTime(entry.switched_at)}
                   </TableCell>
                   <TableCell className="font-medium">
                     {entry.previous_index ? (

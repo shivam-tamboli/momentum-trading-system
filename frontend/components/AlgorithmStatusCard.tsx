@@ -2,7 +2,7 @@ import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
-  formatExactDateTime,
+  formatFullDateTime,
   formatNextRun,
   formatRelativeDate,
   getNextScoringRun,
@@ -34,7 +34,7 @@ export function AlgorithmStatusCard({ recommendations, isLoading }: AlgorithmSta
             <p className="text-sm text-muted-foreground">
               Last ran:{' '}
               <span className="font-mono font-medium text-foreground tabular-nums">
-                {formatExactDateTime(scoredAt)}
+                {formatFullDateTime(scoredAt)}
               </span>
             </p>
 

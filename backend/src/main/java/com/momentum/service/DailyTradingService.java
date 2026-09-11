@@ -27,9 +27,12 @@ import org.springframework.stereotype.Service;
 
 import java.math.BigDecimal;
 import java.math.RoundingMode;
+import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
 
@@ -51,17 +54,20 @@ public class DailyTradingService {
     private final DailyTradeRepository dailyTradeRepository;
     private final AlpacaConfig alpacaConfig;
     private final EncryptionUtil encryptionUtil;
+    private final EmailService emailService;
 
     public DailyTradingService(UserRepository userRepository,
                                 DailyRecommendationRepository dailyRecommendationRepository,
                                 DailyTradeRepository dailyTradeRepository,
                                 AlpacaConfig alpacaConfig,
-                                EncryptionUtil encryptionUtil) {
+                                EncryptionUtil encryptionUtil,
+                                EmailService emailService) {
         this.userRepository = userRepository;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.dailyTradeRepository = dailyTradeRepository;
         this.alpacaConfig = alpacaConfig;
         this.encryptionUtil = encryptionUtil;
+        this.emailService = emailService;
     }
 
     public void runDailyTrading() {
@@ -105,8 +111,14 @@ public class DailyTradingService {
                     .collect(Collectors.toMap(Position::getSymbol, p -> p));
 
             // Single index for this whole run — both sides of the diff belong to it equally.
-            sellSymbols(userAlpacaAPI, user, toSell, positionsBySymbol, user.getSelectedIndex());
-            buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size(), user.getSelectedIndex());
+            List<DailyTrade> sold = sellSymbols(userAlpacaAPI, user, toSell, positionsBySymbol, user.getSelectedIndex());
+            List<DailyTrade> bought = buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size(), user.getSelectedIndex());
+
+            if (!sold.isEmpty() || !bought.isEmpty()) {
+                BigDecimal portfolioValue = fetchPortfolioValue(userAlpacaAPI, user.getId());
+                emailService.sendPortfolioRebalancedEmail(user, bought, sold, portfolioValue,
+                        LocalDateTime.now(ZoneOffset.UTC));
+            }
         } catch (MarketClosedException e) {
             log.info("Daily trading: skipping user {} — {}", user.getId(), e.getMessage());
         } catch (Exception e) {
@@ -143,6 +155,10 @@ public class DailyTradingService {
         user.setSelectedIndex(newIndex);
         userRepository.save(user);
 
+        List<DailyTrade> sold = List.of();
+        List<DailyTrade> bought = List.of();
+        boolean marketWasOpen = true;
+
         // Everything past this point is a best-effort immediate rebalance, not part of "did the
         // preference save succeed." Market-closed is the expected, common case (logged as info);
         // any other failure here (Alpaca outage, bad credentials, etc.) is logged but never
@@ -159,7 +175,7 @@ public class DailyTradingService {
 
             log.info("Index switch for user {}: selling all {} current holdings before buying {}",
                     userId, allHeld.size(), newIndex);
-            sellSymbols(userAlpacaAPI, user, allHeld, positionsBySymbol, previousIndex);
+            sold = sellSymbols(userAlpacaAPI, user, allHeld, positionsBySymbol, previousIndex);
 
             List<DailyRecommendation> newTop5 =
                     dailyRecommendationRepository.findByFilterNameOrderByMomentumScoreDesc(newIndex);
@@ -167,22 +183,26 @@ public class DailyTradingService {
                     newTop5.stream().map(DailyRecommendation::getSymbol).collect(Collectors.toSet());
 
             log.info("Index switch for user {}: buying top {} for {}", userId, newSymbols.size(), newIndex);
-            buySymbols(userAlpacaAPI, user, newSymbols, newSymbols.size(), newIndex);
+            bought = buySymbols(userAlpacaAPI, user, newSymbols, newSymbols.size(), newIndex);
         } catch (MarketClosedException e) {
+            marketWasOpen = false;
             log.info("Index switch for user {}: preference saved as {} — market closed, trading "
                     + "deferred to the next scheduled run", userId, newIndex);
         } catch (Exception e) {
             log.error("Index switch for user {}: preference saved as {}, but the immediate rebalance "
                     + "failed: {}", userId, newIndex, e.getMessage(), e);
         }
+
+        emailService.sendIndexSwitchEmail(user, previousIndex, newIndex, user.getInvestmentAmount(),
+                sold, bought, marketWasOpen, LocalDateTime.now(ZoneOffset.UTC));
     }
 
-    private void sellSymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
-                              Map<String, Position> positionsBySymbol, String indexFilter) {
-        symbols.parallelStream().forEach(symbol -> {
+    private List<DailyTrade> sellSymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
+                                          Map<String, Position> positionsBySymbol, String indexFilter) {
+        return symbols.parallelStream().map(symbol -> {
             Position position = positionsBySymbol.get(symbol);
             if (position == null) {
-                return;
+                return null;
             }
             BigDecimal intendedQuantity = new BigDecimal(position.getQuantity());
             try {
@@ -196,7 +216,7 @@ public class DailyTradingService {
                     BigDecimal filledPrice = parseOrZero(filledOrder.getAverageFillPrice());
                     BigDecimal filledQty = parseOrZero(filledOrder.getFilledQuantity());
                     BigDecimal amountReceived = filledPrice.multiply(filledQty);
-                    saveTrade(user, symbol, ActionType.SELL, TradeStatus.FILLED, amountReceived, filledPrice,
+                    return saveTrade(user, symbol, ActionType.SELL, TradeStatus.FILLED, amountReceived, filledPrice,
                             filledQty, order.getId(), indexFilter);
                 } else {
                     // Alpaca accepted the order but never confirmed a fill within the wait window.
@@ -204,15 +224,15 @@ public class DailyTradingService {
                     // we told it to sell — rather than a misleading $0 / 0-share "fill".
                     log.warn("Daily trading: sell for {} (user {}) not confirmed filled within the "
                             + "wait window — recording as PENDING", symbol, user.getId());
-                    saveTrade(user, symbol, ActionType.SELL, TradeStatus.PENDING, null, null, intendedQuantity,
+                    return saveTrade(user, symbol, ActionType.SELL, TradeStatus.PENDING, null, null, intendedQuantity,
                             order.getId(), indexFilter);
                 }
             } catch (Exception e) {
                 log.warn("Daily trading: sell failed for {} (user {}): {}", symbol, user.getId(), e.getMessage());
-                saveTrade(user, symbol, ActionType.SELL, TradeStatus.FAILED, null, null, intendedQuantity, null,
+                return saveTrade(user, symbol, ActionType.SELL, TradeStatus.FAILED, null, null, intendedQuantity, null,
                         indexFilter);
             }
-        });
+        }).filter(Objects::nonNull).collect(Collectors.toList());
     }
 
     private static final BigDecimal BUFFER_RATE = new BigDecimal("0.10");
@@ -224,15 +244,15 @@ public class DailyTradingService {
     // sizing off symbols.size() instead would dump most of the day's investment amount into
     // whichever handful of stocks happen to be new, since already-held stocks that stayed in the
     // top 5 aren't touched by this call at all.
-    private void buySymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols, int targetAllocationCount,
-                             String indexFilter) {
+    private List<DailyTrade> buySymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
+                                         int targetAllocationCount, String indexFilter) {
         if (symbols.isEmpty()) {
-            return;
+            return List.of();
         }
         if (targetAllocationCount <= 0) {
             log.warn("Daily trading: skipping buys for user {} — invalid target allocation count {}",
                     user.getId(), targetAllocationCount);
-            return;
+            return List.of();
         }
 
         // investment_amount is the user-set amount to invest per rebalance cycle (set once during
@@ -241,7 +261,7 @@ public class DailyTradingService {
         BigDecimal investmentAmount = user.getInvestmentAmount();
         if (investmentAmount == null) {
             log.info("Daily trading: skipping buys for user {} — no investment_amount set", user.getId());
-            return;
+            return List.of();
         }
 
         // Buffer is a safety margin only: never stored, never deducted from anything, never
@@ -256,21 +276,21 @@ public class DailyTradingService {
             availableBuyingPower = new BigDecimal(account.getBuyingPower());
         } catch (AlpacaClientException e) {
             log.warn("Daily trading: failed to fetch buying power for user {}: {}", user.getId(), e.getMessage());
-            return;
+            return List.of();
         }
 
         if (availableBuyingPower.compareTo(safeAmount) < 0) {
             log.warn("Insufficient buying power after buffer deduction for user {}", user.getId());
-            return;
+            return List.of();
         }
 
         BigDecimal amountPerStock = safeAmount.divide(BigDecimal.valueOf(targetAllocationCount), 2, RoundingMode.DOWN);
         if (amountPerStock.compareTo(MIN_ORDER_SIZE) < 0) {
             log.warn("Investment amount too small after buffer deduction for user {}", user.getId());
-            return;
+            return List.of();
         }
 
-        symbols.parallelStream().forEach(symbol -> {
+        return symbols.parallelStream().map(symbol -> {
             try {
                 Order order = userAlpacaAPI.orders().requestOrder(
                         symbol, null, amountPerStock.doubleValue(), OrderSide.BUY,
@@ -281,7 +301,7 @@ public class DailyTradingService {
                 if (filledOrder != null) {
                     BigDecimal filledPrice = parseOrZero(filledOrder.getAverageFillPrice());
                     BigDecimal filledQty = parseOrZero(filledOrder.getFilledQuantity());
-                    saveTrade(user, symbol, ActionType.BUY, TradeStatus.FILLED, amountPerStock, filledPrice,
+                    return saveTrade(user, symbol, ActionType.BUY, TradeStatus.FILLED, amountPerStock, filledPrice,
                             filledQty, order.getId(), indexFilter);
                 } else {
                     // The dollar amount we asked Alpaca to buy is known regardless of fill status —
@@ -289,23 +309,29 @@ public class DailyTradingService {
                     // until it fills. Never fabricate a $0 / 0-share result for what's still pending.
                     log.warn("Daily trading: buy for {} (user {}) not confirmed filled within the "
                             + "wait window — recording as PENDING", symbol, user.getId());
-                    saveTrade(user, symbol, ActionType.BUY, TradeStatus.PENDING, amountPerStock, null, null,
+                    return saveTrade(user, symbol, ActionType.BUY, TradeStatus.PENDING, amountPerStock, null, null,
                             order.getId(), indexFilter);
                 }
             } catch (Exception e) {
                 log.warn("Daily trading: buy failed for {} (user {}): {}", symbol, user.getId(), e.getMessage());
-                saveTrade(user, symbol, ActionType.BUY, TradeStatus.FAILED, amountPerStock, null, null, null,
+                return saveTrade(user, symbol, ActionType.BUY, TradeStatus.FAILED, amountPerStock, null, null, null,
                         indexFilter);
             }
-        });
+        }).collect(Collectors.toList());
     }
 
-    private void saveTrade(User user, String symbol, ActionType action, TradeStatus status, BigDecimal amount,
-                            BigDecimal pricePerShare, BigDecimal quantity, String alpacaOrderId,
-                            String indexFilter) {
+    private DailyTrade saveTrade(User user, String symbol, ActionType action, TradeStatus status, BigDecimal amount,
+                                  BigDecimal pricePerShare, BigDecimal quantity, String alpacaOrderId,
+                                  String indexFilter) {
         DailyTrade trade = new DailyTrade(null, user, symbol, action, status, amount, pricePerShare, quantity,
                 alpacaOrderId, indexFilter, null);
-        dailyTradeRepository.save(trade);
+        DailyTrade saved = dailyTradeRepository.save(trade);
+
+        if (status == TradeStatus.FAILED) {
+            emailService.sendTradeFailedEmail(user, symbol, action, LocalDateTime.now(ZoneOffset.UTC));
+        }
+
+        return saved;
     }
 
     private BigDecimal parseOrZero(String value) {
@@ -327,6 +353,18 @@ public class DailyTradingService {
             return userAlpacaAPI.positions().get();
         } catch (AlpacaClientException e) {
             throw new RuntimeException("Failed to fetch Alpaca positions for user " + userId, e);
+        }
+    }
+
+    // Best-effort — a failed fetch here shouldn't stop the rebalance email from going out, since
+    // the trades themselves already succeeded; the email just shows "—" for portfolio value.
+    private BigDecimal fetchPortfolioValue(AlpacaAPI userAlpacaAPI, Long userId) {
+        try {
+            Account account = userAlpacaAPI.account().get();
+            return new BigDecimal(account.getPortfolioValue());
+        } catch (Exception e) {
+            log.warn("Daily trading: failed to fetch portfolio value for user {}: {}", userId, e.getMessage());
+            return null;
         }
     }
 

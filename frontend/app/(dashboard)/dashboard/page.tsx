@@ -15,11 +15,13 @@ import { PositionsTable } from '@/components/PositionsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { getScoringState } from '@/lib/engine-status';
 import type {
   AccountResponse,
   BenchmarkResponse,
   DailyRecommendationItem,
   DailyTradeItem,
+  EngineStatus,
   IndexPriceHistoryResponse,
   PositionItem,
   SelectableIndex,
@@ -61,6 +63,14 @@ export default function DashboardPage() {
     enabled: recommendationsPath !== null,
   });
 
+  const engineStatusQuery = useQuery({
+    queryKey: ['engine-status'],
+    queryFn: async () => {
+      const { data } = await api.get<EngineStatus>('/engine-status');
+      return data;
+    },
+  });
+
   const dailyTradesQuery = useQuery({
     queryKey: ['daily-trades', userId],
     queryFn: async () => {
@@ -100,6 +110,8 @@ export default function DashboardPage() {
   });
 
   const heldSymbols = new Set(positionsQuery.data?.map((p) => p.symbol));
+  const topFiveHeading =
+    engineStatusQuery.data && getScoringState(engineStatusQuery.data) === 'live' ? "Today's Top 5" : 'Latest Top 5';
 
   if (isUserLoading || userId === null) {
     return <p className="text-sm text-muted-foreground">Loading account…</p>;
@@ -161,7 +173,8 @@ export default function DashboardPage() {
       {selectedIndex && (
         <AlgorithmStatusCard
           recommendations={dailyRecommendationsQuery.data}
-          isLoading={dailyRecommendationsQuery.isLoading}
+          engineStatus={engineStatusQuery.data}
+          isLoading={dailyRecommendationsQuery.isLoading || engineStatusQuery.isLoading}
         />
       )}
 
@@ -185,7 +198,8 @@ export default function DashboardPage() {
       <Card>
         <CardHeader>
           <CardTitle>
-            Today&apos;s Top 5{selectedIndex ? ` — ${selectedIndex}` : ''}
+            {topFiveHeading}
+            {selectedIndex ? ` — ${selectedIndex}` : ''}
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -210,7 +224,8 @@ export default function DashboardPage() {
         <CardContent className="space-y-4">
           <TradeHistoryTable
             trades={dailyTradesQuery.data?.slice(0, tradeHistoryLimit)}
-            isLoading={dailyTradesQuery.isLoading}
+            engineStatus={engineStatusQuery.data}
+            isLoading={dailyTradesQuery.isLoading || engineStatusQuery.isLoading}
           />
           {dailyTradesQuery.data && dailyTradesQuery.data.length > tradeHistoryLimit && (
             <div className="flex justify-center">

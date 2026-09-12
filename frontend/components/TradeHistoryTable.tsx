@@ -12,7 +12,8 @@ import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
 import { formatFullDateTime, formatRelativeDate, parseBackendTimestamp } from '@/lib/freshness';
-import type { DailyTradeItem } from '@/lib/types';
+import { getTradingState } from '@/lib/engine-status';
+import type { DailyTradeItem, EngineStatus } from '@/lib/types';
 
 const ACTION_STYLES: Record<DailyTradeItem['action'], string> = {
   BUY: 'bg-gain text-gain-foreground hover:bg-gain',
@@ -102,15 +103,24 @@ function isToday(tradedAt: string): boolean {
 
 interface TradeHistoryTableProps {
   trades: DailyTradeItem[] | undefined;
+  engineStatus: EngineStatus | undefined;
   isLoading: boolean;
 }
 
-export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps) {
+export function TradeHistoryTable({ trades, engineStatus, isLoading }: TradeHistoryTableProps) {
   const items = trades ? buildRenderItems(trades) : [];
   // Only relevant once there's history at all — a brand-new account with zero trades ever gets
   // the generic empty state below instead, not a claim that holdings already match anything.
   const hasHistory = !!trades && trades.length > 0;
   const hasTradeToday = hasHistory && trades!.some((t) => isToday(t.traded_at));
+  const tradingState = engineStatus ? getTradingState(engineStatus) : null;
+  // No engine-status (unreachable) falls back to the old heuristic — any history with nothing
+  // dated today reads as "matched," same as before this fix. With engine-status available, that
+  // claim only holds when Job 2 actually ran and found a match ('completed'); a day with no
+  // session at all gets its own, honest message, and a trading day where Job 2 simply hasn't run
+  // yet ('pending') gets neither — there's nothing true to say about it yet.
+  const showNoRebalanceBanner = hasHistory && !hasTradeToday && (tradingState === 'completed' || tradingState === null);
+  const showMarketClosedBanner = hasHistory && !hasTradeToday && tradingState === 'market-closed';
 
   return (
     <Table>
@@ -149,11 +159,21 @@ export function TradeHistoryTable({ trades, isLoading }: TradeHistoryTableProps)
           </TableRow>
         )}
 
-        {!isLoading && hasHistory && !hasTradeToday && (
+        {!isLoading && showNoRebalanceBanner && (
           <TableRow className="hover:bg-transparent">
             <TableCell colSpan={8} className="py-3">
               <div className="rounded-md border border-gain/50 bg-gain/10 px-3 py-2 text-center text-sm font-medium text-gain">
                 No rebalancing today — your holdings already match today&apos;s top 5.
+              </div>
+            </TableCell>
+          </TableRow>
+        )}
+
+        {!isLoading && showMarketClosedBanner && (
+          <TableRow className="hover:bg-transparent">
+            <TableCell colSpan={8} className="py-3">
+              <div className="rounded-md border border-muted-foreground/30 bg-muted/30 px-3 py-2 text-center text-sm font-medium text-muted-foreground">
+                Market is closed today — no rebalancing scheduled.
               </div>
             </TableCell>
           </TableRow>

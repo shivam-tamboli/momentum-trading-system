@@ -8,16 +8,27 @@ import {
   getNextScoringRun,
   isStale,
 } from '@/lib/freshness';
-import type { DailyRecommendationItem } from '@/lib/types';
+import { getScoringState } from '@/lib/engine-status';
+import type { DailyRecommendationItem, EngineStatus } from '@/lib/types';
 
 interface AlgorithmStatusCardProps {
   recommendations: DailyRecommendationItem[] | undefined;
+  engineStatus: EngineStatus | undefined;
   isLoading: boolean;
 }
 
-export function AlgorithmStatusCard({ recommendations, isLoading }: AlgorithmStatusCardProps) {
+const STATUS_STYLES = {
+  live: 'border-gain/50 bg-gain/10 text-gain',
+  pending: 'border-pending/50 bg-pending/10 text-pending',
+  'market-closed': 'border-muted-foreground/30 bg-muted/30 text-muted-foreground',
+};
+
+export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading }: AlgorithmStatusCardProps) {
   const scoredAt = recommendations && recommendations.length > 0 ? recommendations[0].scored_at : null;
+  // engine-status is the source of truth; if it's ever unreachable, fall back to the old
+  // elapsed-time heuristic rather than showing nothing.
   const stale = scoredAt !== null && isStale(scoredAt);
+  const scoringState = engineStatus ? getScoringState(engineStatus) : stale ? 'pending' : 'live';
 
   return (
     <Card>
@@ -38,18 +49,8 @@ export function AlgorithmStatusCard({ recommendations, isLoading }: AlgorithmSta
               </span>
             </p>
 
-            <div
-              className={cn(
-                'rounded-md border px-3 py-2 text-sm font-medium',
-                stale ? 'border-pending/50 bg-pending/10 text-pending' : 'border-gain/50 bg-gain/10 text-gain'
-              )}
-            >
-              {stale ? (
-                <>
-                  ⚠️ Scores are from {formatRelativeDate(scoredAt)} — today&apos;s algorithm has
-                  not run yet.
-                </>
-              ) : (
+            <div className={cn('rounded-md border px-3 py-2 text-sm font-medium', STATUS_STYLES[scoringState])}>
+              {scoringState === 'live' ? (
                 <span className="flex items-center gap-2">
                   <span className="relative flex h-2 w-2">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gain opacity-75" />
@@ -57,6 +58,13 @@ export function AlgorithmStatusCard({ recommendations, isLoading }: AlgorithmSta
                   </span>
                   Today&apos;s scores are live
                 </span>
+              ) : scoringState === 'market-closed' ? (
+                <>🌙 Market is closed today — showing scores from {formatRelativeDate(scoredAt)}.</>
+              ) : (
+                <>
+                  ⚠️ Scores are from {formatRelativeDate(scoredAt)} — today&apos;s algorithm has
+                  not run yet.
+                </>
               )}
             </div>
 

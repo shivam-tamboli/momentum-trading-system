@@ -132,3 +132,13 @@ export interface MetricsResponse {
   trading: TradingStats;
   database: DatabaseStats;
 }
+
+// From GET /engine-status — the backend's own answer to "is today a trading day, and did
+// today's Job 1 / Job 2 actually run," computed from Alpaca's Clock+Calendar APIs and
+// scheduler_state. See lib/engine-status.ts for how the dashboard turns this into a display state.
+export interface EngineStatus {
+  today: string;
+  is_trading_day: boolean;
+  job1_last_success_date: string | null;
+  job2_last_run_date: string | null;
+}

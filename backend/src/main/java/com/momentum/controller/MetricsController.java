@@ -7,6 +7,7 @@ import com.momentum.model.enums.AlgorithmRunStatus;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.repository.DailyTradeRepository;
 import com.momentum.repository.SchedulerStateRepository;
+import com.momentum.service.EmailMetricsService;
 import com.momentum.service.IndexConstituentService;
 import com.momentum.service.MetricsService;
 import org.springframework.http.ResponseEntity;
@@ -31,17 +32,20 @@ public class MetricsController {
     private static final Long SCHEDULER_STATE_ID = 1L;
 
     private final MetricsService metricsService;
+    private final EmailMetricsService emailMetricsService;
     private final DailyRecommendationRepository dailyRecommendationRepository;
     private final DailyTradeRepository dailyTradeRepository;
     private final IndexConstituentService indexConstituentService;
     private final SchedulerStateRepository schedulerStateRepository;
 
     public MetricsController(MetricsService metricsService,
+                              EmailMetricsService emailMetricsService,
                               DailyRecommendationRepository dailyRecommendationRepository,
                               DailyTradeRepository dailyTradeRepository,
                               IndexConstituentService indexConstituentService,
                               SchedulerStateRepository schedulerStateRepository) {
         this.metricsService = metricsService;
+        this.emailMetricsService = emailMetricsService;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.dailyTradeRepository = dailyTradeRepository;
         this.indexConstituentService = indexConstituentService;
@@ -79,7 +83,8 @@ public class MetricsController {
                 new HealthStatus(dbStatus),
                 buildAlgorithmStats(),
                 new TradingStats(totalTrades, buyCount, sellCount),
-                new DatabaseStats(universeSize, recommendationCount)
+                new DatabaseStats(universeSize, recommendationCount),
+                new EmailStats(emailMetricsService.getLastSentAt(), emailMetricsService.getLastError())
         );
 
         return ResponseEntity.ok(response);
@@ -135,7 +140,13 @@ public class MetricsController {
     public record DatabaseStats(long stockCount, long recommendationCount) {
     }
 
+    // lastSentAt/lastError read straight off EmailMetricsService (see there for the "only moves
+    // forward on success" semantics) — this is the same signal /admin/test-email exercises
+    // on demand, surfaced here for passive visibility without needing to dig through logs.
+    public record EmailStats(LocalDateTime lastSentAt, String lastError) {
+    }
+
     public record MetricsResponse(HealthStatus health, AlgorithmStats algorithm, TradingStats trading,
-                                   DatabaseStats database) {
+                                   DatabaseStats database, EmailStats email) {
     }
 }

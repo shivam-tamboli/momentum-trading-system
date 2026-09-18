@@ -10,9 +10,13 @@ import com.momentum.model.enums.TradeStatus;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
-import org.springframework.mail.SimpleMailMessage;
-import org.springframework.mail.javamail.JavaMailSender;
+import org.springframework.http.HttpEntity;
+import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
+import org.springframework.http.client.SimpleClientHttpRequestFactory;
 import org.springframework.stereotype.Service;
+import org.springframework.web.client.HttpStatusCodeException;
+import org.springframework.web.client.RestTemplate;
 
 import java.math.BigDecimal;
 import java.time.Instant;
@@ -24,15 +28,22 @@ import java.time.format.DateTimeFormatter;
 import java.math.RoundingMode;
 import java.util.List;
 import java.util.Locale;
+import java.util.Map;
 import java.util.stream.Stream;
 
 /**
- * All outbound user notifications, over the existing spring.mail SMTP config (see
- * application.properties / MAIL_HOST etc). Every business-email method routes through send(),
- * which swallows its own exceptions — a failed or misconfigured mail send must never fail the
- * trading run, scoring run, or index switch it's reporting on. See ARCHITECTURE.md for why this
- * class didn't exist before now: an earlier version was deleted during the daily-engine rewrite
- * and never rebuilt.
+ * All outbound user notifications, sent over Resend's HTTPS API (see application.properties /
+ * RESEND_API_KEY etc) rather than SMTP — Render's free tier blocks outbound SMTP (port 587),
+ * which made every email silently hang forever with no timeout and no error (see
+ * /admin/test-email's own incident history). A plain HTTPS POST has none of that: it goes over
+ * port 443, which is never blocked the way SMTP ports are, and the RestTemplate below has an
+ * explicit timeout so a network problem fails fast and loud instead of hanging a request thread
+ * indefinitely.
+ *
+ * Every business-email method routes through send(), which swallows its own exceptions — a
+ * failed or misconfigured mail send must never fail the trading run, scoring run, or index switch
+ * it's reporting on. See ARCHITECTURE.md for why this class didn't exist before now: an earlier
+ * version was deleted during the daily-engine rewrite and never rebuilt.
  *
  * A swallowed failure isn't a silent one, though: doSend() logs it at ERROR with the email type,
  * recipient, subject and full exception, and records it in {@link EmailMetricsService} so
@@ -44,21 +55,39 @@ public class EmailService {
 
     private static final Logger log = LoggerFactory.getLogger(EmailService.class);
 
+    private static final String RESEND_API_URL = "https://api.resend.com/emails";
+    private static final int CONNECT_TIMEOUT_MS = 5_000;
+    private static final int READ_TIMEOUT_MS = 10_000;
+
     private static final ZoneId IST_ZONE = ZoneId.of("Asia/Kolkata");
     private static final ZoneId ET_ZONE = ZoneId.of("America/New_York");
 
     private static final DateTimeFormatter TIME_FORMAT = DateTimeFormatter.ofPattern("h:mm a", Locale.US);
     private static final DateTimeFormatter DATE_FORMAT = DateTimeFormatter.ofPattern("MMM d, yyyy", Locale.US);
 
-    private final JavaMailSender javaMailSender;
+    private final RestTemplate restTemplate;
     private final EmailMetricsService emailMetricsService;
 
-    @Value("${spring.mail.username}")
+    @Value("${resend.api-key}")
+    private String resendApiKey;
+
+    @Value("${resend.from-address}")
     private String fromAddress;
 
-    public EmailService(JavaMailSender javaMailSender, EmailMetricsService emailMetricsService) {
-        this.javaMailSender = javaMailSender;
+    public EmailService(EmailMetricsService emailMetricsService) {
         this.emailMetricsService = emailMetricsService;
+        this.restTemplate = buildRestTemplate();
+    }
+
+    // Bounded connect/read timeouts, deliberately — a plain `new RestTemplate()` has none by
+    // default, which is exactly the class of bug (an indefinite hang, not a clean error) that
+    // motivated moving off SMTP in the first place. 10s read timeout comfortably covers a normal
+    // Resend response while still failing fast if their API or the network is ever unreachable.
+    private static RestTemplate buildRestTemplate() {
+        SimpleClientHttpRequestFactory factory = new SimpleClientHttpRequestFactory();
+        factory.setConnectTimeout(CONNECT_TIMEOUT_MS);
+        factory.setReadTimeout(READ_TIMEOUT_MS);
+        return new RestTemplate(factory);
     }
 
     // ---- Email 1: today's top 5 for the user's index, sent after Job 1 (scoring) ----
@@ -290,28 +319,46 @@ public class EmailService {
         }
     }
 
-    // The one place that actually talks to JavaMailSender. Always logs the outcome and records it
-    // in EmailMetricsService; throws EmailSendException on failure instead of swallowing, so the
-    // two callers above can each decide what "never propagate" vs "surface the real error" means
-    // for their situation.
+    // The one place that actually talks to Resend. Always logs the outcome and records it in
+    // EmailMetricsService; throws EmailSendException on failure instead of swallowing, so the two
+    // callers above can each decide what "never propagate" vs "surface the real error" means for
+    // their situation.
     private void doSend(EmailType type, String to, String subject, String body) {
         try {
-            SimpleMailMessage message = new SimpleMailMessage();
-            message.setFrom(fromAddress);
-            message.setTo(to);
-            message.setSubject(subject);
-            message.setText(body);
-            javaMailSender.send(message);
+            HttpHeaders headers = new HttpHeaders();
+            headers.setBearerAuth(resendApiKey);
+            headers.setContentType(MediaType.APPLICATION_JSON);
+
+            Map<String, Object> payload = Map.of(
+                    "from", fromAddress,
+                    "to", List.of(to),
+                    "subject", subject,
+                    "text", body
+            );
+
+            restTemplate.postForEntity(RESEND_API_URL, new HttpEntity<>(payload, headers), String.class);
 
             LocalDateTime sentAt = LocalDateTime.now(ZoneOffset.UTC);
             emailMetricsService.recordSuccess(sentAt);
             log.info("Sent email [{}] to {}: {}", type, to, subject);
         } catch (Exception e) {
-            String errorMessage = e.getMessage();
+            String errorMessage = extractErrorMessage(e);
             emailMetricsService.recordFailure(type + ": " + errorMessage);
             log.error("Email send FAILED — type={}, recipient={}, subject={}, error={}",
                     type, to, subject, errorMessage, e);
             throw new EmailSendException(errorMessage, e);
         }
+    }
+
+    // Resend returns a JSON error body (e.g. {"statusCode":403,"message":"...","name":"..."}) on
+    // a non-2xx response — that body is the actually useful, exact error (an invalid API key, an
+    // unverified sender domain, a bad recipient), so it's preferred over the generic
+    // HttpStatusCodeException message whenever Spring managed to capture one.
+    private String extractErrorMessage(Exception e) {
+        if (e instanceof HttpStatusCodeException httpError) {
+            String responseBody = httpError.getResponseBodyAsString();
+            return responseBody.isBlank() ? httpError.getMessage() : responseBody;
+        }
+        return e.getMessage();
     }
 }

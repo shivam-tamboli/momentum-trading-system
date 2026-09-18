@@ -171,6 +171,12 @@ public class DailyTradingService {
             return;
         }
 
+        // Written before any Alpaca call — if the JVM dies mid-run (crash, Render restart) this
+        // row is the only trace that Job 2 ever started for this user today at all. Every branch
+        // below overwrites it with a real outcome; this is not one of the terminal statuses.
+        dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.IN_PROGRESS,
+                "Rebalance in progress.", null);
+
         try {
             AlpacaAPI userAlpacaAPI = buildUserAlpacaAPI(user);
             checkMarketOpen(userAlpacaAPI);

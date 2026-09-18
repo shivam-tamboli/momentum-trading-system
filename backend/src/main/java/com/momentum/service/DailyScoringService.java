@@ -178,6 +178,22 @@ public class DailyScoringService {
             toSave.addAll(sp400);
             toSave.addAll(sp600);
 
+            Map<String, List<DailyRecommendation>> byFilter = Map.of(
+                    IndexConstituentService.SP500, sp500,
+                    IndexConstituentService.NASDAQ100, nasdaq100,
+                    IndexConstituentService.SP400, sp400,
+                    IndexConstituentService.SP600, sp600,
+                    FULL_MARKET, fullMarket
+            );
+
+            // Written before daily_recommendation's own delete+insert below, deliberately — the
+            // engine log is the durable record that today's top 5 was actually computed. If a
+            // crash lands between the two (dropped connection, OOM, Render restart mid-request),
+            // daily_recommendation might end up empty, but this row already exists and already has
+            // the real top5_symbols on it, not an "in progress" placeholder waiting for a step that
+            // never happens on its own.
+            recordJob1Success(byFilter);
+
             // Atomic: deleteAll() and saveAll() either both commit or neither does. Without this,
             // a crash, dropped connection, or thrown exception between the two calls would leave
             // daily_recommendation genuinely empty — not "yesterday's data kept" — since each
@@ -191,15 +207,7 @@ public class DailyScoringService {
             persistRunStats(scored.size(), durationMs);
             log.info("Daily scoring complete in {}ms, {} recommendation rows stored", durationMs, toSave.size());
 
-            Map<String, List<DailyRecommendation>> byFilter = Map.of(
-                    IndexConstituentService.SP500, sp500,
-                    IndexConstituentService.NASDAQ100, nasdaq100,
-                    IndexConstituentService.SP400, sp400,
-                    IndexConstituentService.SP600, sp600,
-                    FULL_MARKET, fullMarket
-            );
             sendTopFiveEmails(byFilter);
-            recordJob1Success(byFilter);
         } catch (Exception e) {
             long durationMs = System.currentTimeMillis() - startTime;
             metricsService.recordRunFailure(e.getMessage(), durationMs);

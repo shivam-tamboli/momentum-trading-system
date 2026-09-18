@@ -3,6 +3,7 @@ package com.momentum.service;
 import com.momentum.model.DailyRecommendation;
 import com.momentum.model.SchedulerState;
 import com.momentum.model.User;
+import com.momentum.model.enums.Job1Status;
 import com.momentum.repository.DailyRecommendationRepository;
 import com.momentum.repository.SchedulerStateRepository;
 import com.momentum.repository.UserRepository;
@@ -65,6 +66,7 @@ public class DailyScoringService {
     private final SchedulerStateRepository schedulerStateRepository;
     private final UserRepository userRepository;
     private final EmailService emailService;
+    private final DailyEngineLogService dailyEngineLogService;
     private final TransactionTemplate transactionTemplate;
 
     public DailyScoringService(AlpacaAPI systemAlpacaAPI,
@@ -74,6 +76,7 @@ public class DailyScoringService {
                                 SchedulerStateRepository schedulerStateRepository,
                                 UserRepository userRepository,
                                 EmailService emailService,
+                                DailyEngineLogService dailyEngineLogService,
                                 PlatformTransactionManager transactionManager) {
         this.systemAlpacaAPI = systemAlpacaAPI;
         this.indexConstituentService = indexConstituentService;
@@ -82,6 +85,7 @@ public class DailyScoringService {
         this.schedulerStateRepository = schedulerStateRepository;
         this.userRepository = userRepository;
         this.emailService = emailService;
+        this.dailyEngineLogService = dailyEngineLogService;
         // A plain TransactionTemplate rather than @Transactional: this class calls the
         // delete+save block on itself (self-invocation), which Spring's proxy-based @Transactional
         // would silently ignore. TransactionTemplate wraps just those two calls — not the whole
@@ -143,6 +147,7 @@ public class DailyScoringService {
                         scored.size(), symbols.size());
                 log.warn(message);
                 metricsService.recordRunFailure(message, durationMs);
+                recordJob1Failure();
                 return;
             }
 
@@ -162,6 +167,7 @@ public class DailyScoringService {
                 log.warn("Scoring produced no results — keeping previous recommendations.");
                 metricsService.recordRunFailure("Scoring produced no results — keeping previous recommendations",
                         durationMs);
+                recordJob1Failure();
                 return;
             }
 
@@ -193,9 +199,11 @@ public class DailyScoringService {
                     FULL_MARKET, fullMarket
             );
             sendTopFiveEmails(byFilter);
+            recordJob1Success(byFilter);
         } catch (Exception e) {
             long durationMs = System.currentTimeMillis() - startTime;
             metricsService.recordRunFailure(e.getMessage(), durationMs);
+            recordJob1Failure();
             throw e;
         }
     }
@@ -213,22 +221,50 @@ public class DailyScoringService {
         schedulerStateRepository.save(state);
     }
 
+    // Same "has a key and a chosen index" definition DailyTradingService uses for Job 2 — anyone
+    // eligible to actually get traded is also eligible for a daily_engine_log row, whether or not
+    // Job 1 succeeded that day.
+    private List<User> eligibleUsers() {
+        return userRepository.findAll().stream()
+                .filter(u -> u.getAlpacaApiKeyEncrypted() != null && !u.getAlpacaApiKeyEncrypted().isBlank())
+                .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
+                .toList();
+    }
+
     // Best-effort — a mail failure for one user must never affect scoring, and never block the
     // next user's email either (see EmailService.send's own try/catch).
     private void sendTopFiveEmails(Map<String, List<DailyRecommendation>> byFilter) {
         LocalDateTime scoredAt = LocalDateTime.now(ZoneOffset.UTC);
 
-        List<User> eligibleUsers = userRepository.findAll().stream()
-                .filter(u -> u.getAlpacaApiKeyEncrypted() != null && !u.getAlpacaApiKeyEncrypted().isBlank())
-                .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
-                .toList();
-
-        for (User user : eligibleUsers) {
+        for (User user : eligibleUsers()) {
             List<DailyRecommendation> top5 = byFilter.get(user.getSelectedIndex());
             if (top5 == null || top5.isEmpty()) {
                 continue;
             }
             emailService.sendTopFiveEmail(user, user.getSelectedIndex(), top5, scoredAt);
+        }
+    }
+
+    // Writes today's daily_engine_log row (creating it) for every eligible user with their own
+    // index's top 5 — Job 2 updates this same row later today rather than creating a second one.
+    private void recordJob1Success(Map<String, List<DailyRecommendation>> byFilter) {
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+
+        for (User user : eligibleUsers()) {
+            List<DailyRecommendation> top5 = byFilter.get(user.getSelectedIndex());
+            if (top5 == null || top5.isEmpty()) {
+                continue;
+            }
+            String top5Csv = top5.stream().map(DailyRecommendation::getSymbol).collect(Collectors.joining(","));
+            dailyEngineLogService.recordJob1Result(user, today, Job1Status.COMPLETED, top5Csv);
+        }
+    }
+
+    // No top5 to record — scoring didn't produce (or didn't trust) a usable result today.
+    private void recordJob1Failure() {
+        LocalDate today = LocalDate.now(ZoneOffset.UTC);
+        for (User user : eligibleUsers()) {
+            dailyEngineLogService.recordJob1Result(user, today, Job1Status.FAILED, null);
         }
     }
 

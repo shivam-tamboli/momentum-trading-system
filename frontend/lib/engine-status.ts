@@ -13,10 +13,3 @@ export function getScoringState(status: EngineStatus): ScoringState {
   if (!status.is_trading_day) return 'market-closed';
   return status.job1_last_success_date === status.today ? 'live' : 'pending';
 }
-
-export type TradingState = 'completed' | 'pending' | 'market-closed';
-
-export function getTradingState(status: EngineStatus): TradingState {
-  if (!status.is_trading_day) return 'market-closed';
-  return status.job2_last_run_date === status.today ? 'completed' : 'pending';
-}

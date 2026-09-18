@@ -190,7 +190,7 @@ public class DailyEngineSchedulerService {
 
         log.warn("Scheduler: market closed for {} and Job 2 never completed successfully — "
                 + "notifying eligible users", today);
-        dailyTradingService.notifyTradingWindowMissed();
+        dailyTradingService.notifyTradingWindowMissed(today);
 
         job2MissedAlertDate = today;
         persistState();

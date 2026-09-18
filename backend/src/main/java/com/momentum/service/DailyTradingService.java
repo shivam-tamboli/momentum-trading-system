@@ -7,6 +7,7 @@ import com.momentum.model.DailyRecommendation;
 import com.momentum.model.DailyTrade;
 import com.momentum.model.User;
 import com.momentum.model.enums.ActionType;
+import com.momentum.model.enums.Job2Status;
 import com.momentum.model.enums.TradeStatus;
 import com.momentum.model.SchedulerState;
 import com.momentum.repository.DailyRecommendationRepository;
@@ -61,6 +62,7 @@ public class DailyTradingService {
     private final AlpacaAPI systemAlpacaAPI;
     private final EncryptionUtil encryptionUtil;
     private final EmailService emailService;
+    private final DailyEngineLogService dailyEngineLogService;
 
     public DailyTradingService(UserRepository userRepository,
                                 DailyRecommendationRepository dailyRecommendationRepository,
@@ -69,7 +71,8 @@ public class DailyTradingService {
                                 AlpacaConfig alpacaConfig,
                                 AlpacaAPI systemAlpacaAPI,
                                 EncryptionUtil encryptionUtil,
-                                EmailService emailService) {
+                                EmailService emailService,
+                                DailyEngineLogService dailyEngineLogService) {
         this.userRepository = userRepository;
         this.dailyRecommendationRepository = dailyRecommendationRepository;
         this.dailyTradeRepository = dailyTradeRepository;
@@ -78,6 +81,7 @@ public class DailyTradingService {
         this.systemAlpacaAPI = systemAlpacaAPI;
         this.encryptionUtil = encryptionUtil;
         this.emailService = emailService;
+        this.dailyEngineLogService = dailyEngineLogService;
     }
 
     public enum TradingRunOutcome { COMPLETED, ALREADY_DONE, MARKET_CLOSED }
@@ -113,7 +117,7 @@ public class DailyTradingService {
         }
 
         log.info("Daily trading: running for {}", tradingDay);
-        runDailyTrading();
+        runDailyTrading(tradingDay);
 
         state.setJob2LastRunDate(tradingDay);
         schedulerStateRepository.save(state);
@@ -131,8 +135,12 @@ public class DailyTradingService {
     }
 
     // Sent once, to every eligible user, when the market closes with Job 2 never having
-    // completed that day — see DailyEngineSchedulerService.maybeAlertJob2Missed.
-    public void notifyTradingWindowMissed() {
+    // completed that day — see DailyEngineSchedulerService.maybeAlertJob2Missed. Also the one
+    // place that writes a MARKET_CLOSED daily_engine_log row for a day Job 2 never got a chance to
+    // run at all (weekends, holidays) — unlike rebalanceUser's own MarketClosedException catch,
+    // which only fires when it was actually invoked and found the market shut, this covers the far
+    // more common case of never being invoked in the first place.
+    public void notifyTradingWindowMissed(LocalDate today) {
         List<User> eligibleUsers = userRepository.findAll().stream()
                 .filter(this::hasApiKey)
                 .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
@@ -141,10 +149,12 @@ public class DailyTradingService {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         for (User user : eligibleUsers) {
             emailService.sendTradingWindowMissedEmail(user, now);
+            dailyEngineLogService.recordJob2Result(user, today, Job2Status.MARKET_CLOSED,
+                    "Market closed — no trades executed.", null);
         }
     }
 
-    private void runDailyTrading() {
+    private void runDailyTrading(LocalDate tradingDay) {
         List<User> eligibleUsers = userRepository.findAll().stream()
                 .filter(this::hasApiKey)
                 .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
@@ -152,10 +162,10 @@ public class DailyTradingService {
 
         log.info("Daily trading: {} users eligible (have a key and a selected index)", eligibleUsers.size());
 
-        eligibleUsers.parallelStream().forEach(this::rebalanceUser);
+        eligibleUsers.parallelStream().forEach(user -> rebalanceUser(user, tradingDay));
     }
 
-    private void rebalanceUser(User user) {
+    private void rebalanceUser(User user, LocalDate tradingDay) {
         if (user.getInvestmentAmount() == null) {
             log.info("Daily trading: skipping auto-trading for user {} — no investment_amount set", user.getId());
             return;
@@ -192,15 +202,45 @@ public class DailyTradingService {
             if (!sold.isEmpty() || !bought.isEmpty()) {
                 emailService.sendPortfolioRebalancedEmail(user, bought, sold, portfolioValue,
                         LocalDateTime.now(ZoneOffset.UTC));
+                dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.COMPLETED,
+                        buildRebalanceSummary(bought, sold), portfolioValue);
             } else {
                 emailService.sendNoRebalancingNeededEmail(user, user.getSelectedIndex(), top5, portfolioValue,
                         LocalDateTime.now(ZoneOffset.UTC));
+                dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.NO_REBALANCE_NEEDED,
+                        "Holdings already match today's top 5. No trades placed.", portfolioValue);
             }
         } catch (MarketClosedException e) {
             log.info("Daily trading: skipping user {} — {}", user.getId(), e.getMessage());
+            dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.MARKET_CLOSED, e.getMessage(), null);
         } catch (Exception e) {
             log.error("Daily trading failed for user {}: {}", user.getId(), e.getMessage(), e);
+            dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.FAILED, e.getMessage(), null);
         }
+    }
+
+    // "Bought PANW, CRWD. Sold INTC, SNDK." — lists every symbol actually attempted this run
+    // regardless of fill status (FILLED/PENDING/FAILED), since all three are real outcomes of an
+    // attempted order, not just successes.
+    private String buildRebalanceSummary(List<DailyTrade> bought, List<DailyTrade> sold) {
+        if (bought.isEmpty() && sold.isEmpty()) {
+            return "Holdings already match today's top 5. No trades placed.";
+        }
+        StringBuilder summary = new StringBuilder();
+        if (!bought.isEmpty()) {
+            summary.append("Bought ")
+                    .append(bought.stream().map(DailyTrade::getSymbol).collect(Collectors.joining(", ")))
+                    .append(".");
+        }
+        if (!sold.isEmpty()) {
+            if (summary.length() > 0) {
+                summary.append(" ");
+            }
+            summary.append("Sold ")
+                    .append(sold.stream().map(DailyTrade::getSymbol).collect(Collectors.joining(", ")))
+                    .append(".");
+        }
+        return summary.toString();
     }
 
     /**

@@ -21,6 +21,7 @@ import type {
   BenchmarkResponse,
   DailyRecommendationItem,
   DailyTradeItem,
+  EngineLogItem,
   EngineStatus,
   IndexPriceHistoryResponse,
   PositionItem,
@@ -75,6 +76,15 @@ export default function DashboardPage() {
     queryKey: ['daily-trades', userId],
     queryFn: async () => {
       const { data } = await api.get<DailyTradeItem[]>(`/${userId}/daily-trades`);
+      return data;
+    },
+    enabled: userId !== null,
+  });
+
+  const engineLogQuery = useQuery({
+    queryKey: ['engine-log', userId],
+    queryFn: async () => {
+      const { data } = await api.get<EngineLogItem[]>(`/${userId}/engine-log`);
       return data;
     },
     enabled: userId !== null,
@@ -224,8 +234,8 @@ export default function DashboardPage() {
         <CardContent className="space-y-4">
           <TradeHistoryTable
             trades={dailyTradesQuery.data?.slice(0, tradeHistoryLimit)}
-            engineStatus={engineStatusQuery.data}
-            isLoading={dailyTradesQuery.isLoading || engineStatusQuery.isLoading}
+            engineLog={engineLogQuery.data}
+            isLoading={dailyTradesQuery.isLoading || engineLogQuery.isLoading}
           />
           {dailyTradesQuery.data && dailyTradesQuery.data.length > tradeHistoryLimit && (
             <div className="flex justify-center">

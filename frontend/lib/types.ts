@@ -93,7 +93,7 @@ export interface DailyTradeItem {
 }
 
 export type Job1Status = 'COMPLETED' | 'FAILED' | 'NOT_RUN';
-export type Job2Status = 'COMPLETED' | 'NO_REBALANCE_NEEDED' | 'MARKET_CLOSED' | 'FAILED' | 'NOT_RUN';
+export type Job2Status = 'IN_PROGRESS' | 'COMPLETED' | 'NO_REBALANCE_NEEDED' | 'MARKET_CLOSED' | 'FAILED' | 'NOT_RUN';
 
 // From GET /:userId/engine-log — the daily engine's per-day, per-user audit trail (see
 // DailyEngineLog on the backend). Exists specifically so a day with zero daily_trade rows can

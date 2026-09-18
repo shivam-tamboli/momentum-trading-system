@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { CheckCircle2, Clock, Receipt, XCircle } from 'lucide-react';
 import {
   Table,
@@ -11,9 +12,8 @@ import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { cn } from '@/lib/utils';
-import { formatFullDateTime, formatRelativeDate, parseBackendTimestamp } from '@/lib/freshness';
-import { getTradingState } from '@/lib/engine-status';
-import type { DailyTradeItem, EngineStatus } from '@/lib/types';
+import { formatFullDateTime, formatRelativeDate, formatRelativeLogDate } from '@/lib/freshness';
+import type { DailyTradeItem, EngineLogItem } from '@/lib/types';
 
 const ACTION_STYLES: Record<DailyTradeItem['action'], string> = {
   BUY: 'bg-gain text-gain-foreground hover:bg-gain',
@@ -60,15 +60,22 @@ function daySummary(trades: DailyTradeItem[]) {
 type RenderItem =
   | { type: 'day'; day: string; trades: DailyTradeItem[] }
   | { type: 'switch'; from: string; to: string }
-  | { type: 'trade'; trade: DailyTradeItem };
+  | { type: 'trade'; trade: DailyTradeItem }
+  | { type: 'log-summary'; day: string; entry: EngineLogItem };
 
-// Builds one flat list mixing day separators, index-switch markers, and trade rows — trades
-// arrive sorted traded_at desc (newest first), so walking forward through the array walks
-// backward through time. A switch marker appears between two consecutive trades whenever their
-// index_filter differs — "from" is the older trade's index, "to" is the newer one's, since that's
-// the direction the switch actually happened in.
-function buildRenderItems(trades: DailyTradeItem[]): RenderItem[] {
-  const items: RenderItem[] = [];
+// Builds one flat list mixing day separators, index-switch markers, trade rows, and (new)
+// engine-log summary rows — one per calendar day that has zero daily_trade rows but does have a
+// daily_engine_log entry, i.e. a day the system ran and made a conscious decision (no rebalance
+// needed, market closed, or a failure) rather than a day nothing is known about at all.
+//
+// Trades arrive traded_at desc (newest first); engineLog arrives log_date desc. Both are merged
+// into a single chronological list, newest day first, so a genuinely empty gap in history (an old
+// day predating this feature, or a day the system never ran at all) still shows nothing — the
+// original problem this closes is a real run producing no visible trace, not every possible gap.
+function buildRenderItems(trades: DailyTradeItem[], engineLog: EngineLogItem[]): RenderItem[] {
+  // Pass 1: reuse the original flat trade/day/switch walk exactly as before, then split it back
+  // into per-day chunks so summary-only days can be spliced in at the right sorted position.
+  const tradeItems: RenderItem[] = [];
   let currentDay: string | null = null;
 
   for (let i = 0; i < trades.length; i++) {
@@ -77,11 +84,11 @@ function buildRenderItems(trades: DailyTradeItem[]): RenderItem[] {
 
     if (day !== currentDay) {
       const dayTrades = trades.filter((t) => t.traded_at.slice(0, 10) === day);
-      items.push({ type: 'day', day, trades: dayTrades });
+      tradeItems.push({ type: 'day', day, trades: dayTrades });
       currentDay = day;
     }
 
-    items.push({ type: 'trade', trade });
+    tradeItems.push({ type: 'trade', trade });
 
     const older = trades[i + 1];
     if (
@@ -90,37 +97,57 @@ function buildRenderItems(trades: DailyTradeItem[]): RenderItem[] {
       older.index_filter !== null &&
       trade.index_filter !== older.index_filter
     ) {
-      items.push({ type: 'switch', from: older.index_filter, to: trade.index_filter });
+      tradeItems.push({ type: 'switch', from: older.index_filter, to: trade.index_filter });
+    }
+  }
+
+  const chunksByDay = new Map<string, RenderItem[]>();
+  let chunkKey: string | null = null;
+  for (const item of tradeItems) {
+    if (item.type === 'day') {
+      chunkKey = item.day;
+      chunksByDay.set(chunkKey, [item]);
+    } else if (chunkKey) {
+      chunksByDay.get(chunkKey)!.push(item);
+    }
+  }
+
+  // NOT_RUN means Job 1 created today's row but Job 2 hasn't had its turn yet — there's nothing
+  // true to say about that day yet, so it gets no summary row (same principle the old pending
+  // state followed, just per-day now instead of only for today).
+  const summaryDays = new Map<string, EngineLogItem>();
+  for (const entry of engineLog) {
+    if (!chunksByDay.has(entry.log_date) && entry.job2_status !== 'NOT_RUN') {
+      summaryDays.set(entry.log_date, entry);
+    }
+  }
+
+  const allDays = Array.from(new Set([...chunksByDay.keys(), ...summaryDays.keys()])).sort((a, b) =>
+    b.localeCompare(a),
+  );
+
+  const items: RenderItem[] = [];
+  for (const day of allDays) {
+    const chunk = chunksByDay.get(day);
+    if (chunk) {
+      items.push(...chunk);
+    } else {
+      items.push({ type: 'log-summary', day, entry: summaryDays.get(day)! });
     }
   }
 
   return items;
 }
 
-function isToday(tradedAt: string): boolean {
-  return parseBackendTimestamp(tradedAt).toDateString() === new Date().toDateString();
-}
-
 interface TradeHistoryTableProps {
   trades: DailyTradeItem[] | undefined;
-  engineStatus: EngineStatus | undefined;
+  engineLog: EngineLogItem[] | undefined;
   isLoading: boolean;
 }
 
-export function TradeHistoryTable({ trades, engineStatus, isLoading }: TradeHistoryTableProps) {
-  const items = trades ? buildRenderItems(trades) : [];
-  // Only relevant once there's history at all — a brand-new account with zero trades ever gets
-  // the generic empty state below instead, not a claim that holdings already match anything.
-  const hasHistory = !!trades && trades.length > 0;
-  const hasTradeToday = hasHistory && trades!.some((t) => isToday(t.traded_at));
-  const tradingState = engineStatus ? getTradingState(engineStatus) : null;
-  // No engine-status (unreachable) falls back to the old heuristic — any history with nothing
-  // dated today reads as "matched," same as before this fix. With engine-status available, that
-  // claim only holds when Job 2 actually ran and found a match ('completed'); a day with no
-  // session at all gets its own, honest message, and a trading day where Job 2 simply hasn't run
-  // yet ('pending') gets neither — there's nothing true to say about it yet.
-  const showNoRebalanceBanner = hasHistory && !hasTradeToday && (tradingState === 'completed' || tradingState === null);
-  const showMarketClosedBanner = hasHistory && !hasTradeToday && tradingState === 'market-closed';
+export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistoryTableProps) {
+  const items = trades ? buildRenderItems(trades, engineLog ?? []) : [];
+  const hasNothingAtAll = (!trades || trades.length === 0) && items.length === 0;
 
   return (
     <Table>
@@ -148,33 +175,13 @@ export function TradeHistoryTable({ trades, engineStatus, isLoading }: TradeHist
             </TableRow>
           ))}
 
-        {!isLoading && (!trades || trades.length === 0) && (
+        {!isLoading && hasNothingAtAll && (
           <TableRow>
             <TableCell colSpan={8}>
               <EmptyState
                 icon={Receipt}
                 message="No trades yet. Your auto-trades will appear here after market open."
               />
-            </TableCell>
-          </TableRow>
-        )}
-
-        {!isLoading && showNoRebalanceBanner && (
-          <TableRow className="hover:bg-transparent">
-            <TableCell colSpan={8} className="py-3">
-              <div className="rounded-md border border-gain/50 bg-gain/10 px-3 py-2 text-center text-sm font-medium text-gain">
-                No rebalancing today — your holdings already match today&apos;s top 5.
-              </div>
-            </TableCell>
-          </TableRow>
-        )}
-
-        {!isLoading && showMarketClosedBanner && (
-          <TableRow className="hover:bg-transparent">
-            <TableCell colSpan={8} className="py-3">
-              <div className="rounded-md border border-muted-foreground/30 bg-muted/30 px-3 py-2 text-center text-sm font-medium text-muted-foreground">
-                Market is closed today — no rebalancing scheduled.
-              </div>
             </TableCell>
           </TableRow>
         )}
@@ -215,6 +222,10 @@ export function TradeHistoryTable({ trades, engineStatus, isLoading }: TradeHist
                   </TableCell>
                 </TableRow>
               );
+            }
+
+            if (item.type === 'log-summary') {
+              return <LogSummaryRow key={`log-${item.day}`} day={item.day} entry={item.entry} />;
             }
 
             const trade = item.trade;
@@ -260,5 +271,55 @@ export function TradeHistoryTable({ trades, engineStatus, isLoading }: TradeHist
           })}
       </TableBody>
     </Table>
+  );
+}
+
+// One row per day with an engine-log entry but no trades — the exact gap that used to render as
+// nothing at all. Three job2_status outcomes get their own message; everything else (COMPLETED
+// with no trades, which shouldn't normally happen since a real buy/sell always writes a
+// daily_trade row, or a NOT_RUN that slipped through) falls back to the raw rebalance_summary text
+// rather than silently dropping the day.
+function LogSummaryRow({ day, entry }: { day: string; entry: EngineLogItem }) {
+  const top5List = entry.top5_symbols ? entry.top5_symbols.split(',').join(', ') : null;
+
+  let label: string;
+  let detail: ReactNode;
+  let styles: string;
+
+  if (entry.job2_status === 'NO_REBALANCE_NEEDED') {
+    label = 'No rebalancing needed';
+    styles = 'border-gain/50 bg-gain/10 text-gain';
+    detail = (
+      <>
+        <span>✓ Holdings already match today&apos;s top 5</span>
+        {top5List && <span className="font-mono text-xs opacity-90">{top5List}</span>}
+      </>
+    );
+  } else if (entry.job2_status === 'MARKET_CLOSED') {
+    label = 'Market closed';
+    styles = 'border-muted-foreground/30 bg-muted/30 text-muted-foreground';
+    detail = <span>Market closed — no trades executed</span>;
+  } else if (entry.job2_status === 'FAILED') {
+    label = 'Trading failed';
+    styles = 'border-destructive/50 bg-destructive/10 text-destructive';
+    detail = <span>Trading failed — check system logs</span>;
+  } else {
+    label = entry.job2_status;
+    styles = 'border-muted-foreground/30 bg-muted/30 text-muted-foreground';
+    detail = <span>{entry.rebalance_summary ?? 'No further detail recorded.'}</span>;
+  }
+
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={8} className="py-3">
+        <div className={cn('space-y-1 rounded-md border px-3 py-2 text-sm', styles)}>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+            <span className="font-semibold">{formatRelativeLogDate(day)}</span>
+            <span className="font-medium">{label}</span>
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">{detail}</div>
+        </div>
+      </TableCell>
+    </TableRow>
   );
 }

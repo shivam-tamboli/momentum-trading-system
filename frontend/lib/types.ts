@@ -92,6 +92,23 @@ export interface DailyTradeItem {
   index_filter: string | null;
 }
 
+export type Job1Status = 'COMPLETED' | 'FAILED' | 'NOT_RUN';
+export type Job2Status = 'COMPLETED' | 'NO_REBALANCE_NEEDED' | 'MARKET_CLOSED' | 'FAILED' | 'NOT_RUN';
+
+// From GET /:userId/engine-log — the daily engine's per-day, per-user audit trail (see
+// DailyEngineLog on the backend). Exists specifically so a day with zero daily_trade rows can
+// still say *why*: a genuine no-rebalance, a closed market, or a failure, instead of a gap that's
+// indistinguishable from "the system did nothing."
+export interface EngineLogItem {
+  log_date: string;
+  job1_status: Job1Status;
+  job2_status: Job2Status;
+  // Comma-separated, e.g. "AMD,CRWD,PANW,MRVL,FTNT" — null if Job 1 hadn't run yet that day.
+  top5_symbols: string | null;
+  rebalance_summary: string | null;
+  portfolio_value: number | null;
+}
+
 export const SELECTABLE_INDEXES = ['S&P 500', 'S&P 400', 'S&P 600', 'NASDAQ 100', 'FULL_MARKET'] as const;
 export type SelectableIndex = (typeof SELECTABLE_INDEXES)[number];
 

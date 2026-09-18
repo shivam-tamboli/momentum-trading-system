@@ -93,6 +93,14 @@ export function formatRelativeDate(scoredAt: string): string {
   return pastRelativeDayLabel(parseBackendTimestamp(scoredAt));
 }
 
+// log_date (a LocalDate, e.g. "2026-09-16") has no time component at all — parseBackendTimestamp's
+// "append Z" rule produces an invalid date-time string for a bare date, so this parses straight to
+// UTC midnight instead. Used for engine-log entries, which are keyed by calendar day, not a
+// specific instant.
+export function formatRelativeLogDate(logDate: string): string {
+  return pastRelativeDayLabel(new Date(`${logDate}T00:00:00Z`));
+}
+
 // "Sep 7, 2026, 4:01 PM IST (10:31 AM ET)"
 export function formatExactDateTime(scoredAt: string): string {
   const date = parseBackendTimestamp(scoredAt);

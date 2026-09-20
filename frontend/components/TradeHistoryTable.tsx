@@ -61,7 +61,29 @@ type RenderItem =
   | { type: 'day'; day: string; trades: DailyTradeItem[] }
   | { type: 'switch'; from: string; to: string }
   | { type: 'trade'; trade: DailyTradeItem }
-  | { type: 'log-summary'; day: string; entry: EngineLogItem };
+  | { type: 'log-summary'; day: string; entry: EngineLogItem }
+  | { type: 'calendar-gap'; day: string; kind: 'weekend' | 'weekday' | 'today' };
+
+// log_date / traded_at dates are UTC calendar days (see freshness.ts's parseBackendTimestamp) —
+// the gap-fill walk below has to work on that same UTC axis, not the viewer's local calendar day,
+// or a viewer far enough ahead of UTC (e.g. IST, +5:30) would see "today" flip over hours before
+// the backend's UTC day actually does, mislabeling a day nothing could possibly have run for yet
+// as a gap. This is a different concern from formatRelativeLogDate's local-day "Today"/"Yesterday"
+// labels below, which are a display nicety for an already-known date, not a range boundary.
+function todayUtc(): string {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function addUtcDays(dateStr: string, delta: number): string {
+  const date = new Date(`${dateStr}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + delta);
+  return date.toISOString().slice(0, 10);
+}
+
+function isWeekendUtc(dateStr: string): boolean {
+  const day = new Date(`${dateStr}T00:00:00Z`).getUTCDay();
+  return day === 0 || day === 6;
+}
 
 // Builds one flat list mixing day separators, index-switch markers, trade rows, and (new)
 // engine-log summary rows — one per calendar day that has zero daily_trade rows but does have a
@@ -122,18 +144,37 @@ function buildRenderItems(trades: DailyTradeItem[], engineLog: EngineLogItem[]):
     }
   }
 
-  const allDays = Array.from(new Set([...chunksByDay.keys(), ...summaryDays.keys()])).sort((a, b) =>
-    b.localeCompare(a),
-  );
+  const knownDays = new Set([...chunksByDay.keys(), ...summaryDays.keys()]);
+  if (knownDays.size === 0) {
+    // Nothing to anchor a calendar range to — a brand-new account with zero history gets the
+    // generic empty state in the component below, not a wall of "no data" placeholders back to
+    // some arbitrary start date.
+    return [];
+  }
+
+  const earliestKnownDay = Array.from(knownDays).sort()[0];
+  const today = todayUtc();
+  // Guards the (normal) case where today is after every known day, and the edge case where the
+  // most recent thing on record somehow is today itself — either way, walk from whichever is
+  // later down to the earliest known day.
+  const rangeEnd = today > earliestKnownDay ? today : earliestKnownDay;
 
   const items: RenderItem[] = [];
-  for (const day of allDays) {
-    const chunk = chunksByDay.get(day);
+  let cursor = rangeEnd;
+  while (cursor >= earliestKnownDay) {
+    const chunk = chunksByDay.get(cursor);
     if (chunk) {
       items.push(...chunk);
+    } else if (summaryDays.has(cursor)) {
+      items.push({ type: 'log-summary', day: cursor, entry: summaryDays.get(cursor)! });
+    } else if (cursor === today) {
+      items.push({ type: 'calendar-gap', day: cursor, kind: 'today' });
+    } else if (isWeekendUtc(cursor)) {
+      items.push({ type: 'calendar-gap', day: cursor, kind: 'weekend' });
     } else {
-      items.push({ type: 'log-summary', day, entry: summaryDays.get(day)! });
+      items.push({ type: 'calendar-gap', day: cursor, kind: 'weekday' });
     }
+    cursor = addUtcDays(cursor, -1);
   }
 
   return items;
@@ -228,6 +269,10 @@ export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistory
               return <LogSummaryRow key={`log-${item.day}`} day={item.day} entry={item.entry} />;
             }
 
+            if (item.type === 'calendar-gap') {
+              return <CalendarGapRow key={`gap-${item.day}`} day={item.day} kind={item.kind} />;
+            }
+
             const trade = item.trade;
             const StatusIcon = STATUS_ICONS[trade.status];
             return (
@@ -318,6 +363,43 @@ function LogSummaryRow({ day, entry }: { day: string; entry: EngineLogItem }) {
             <span className="font-medium">{label}</span>
           </div>
           <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">{detail}</div>
+        </div>
+      </TableCell>
+    </TableRow>
+  );
+}
+
+// A calendar day with no daily_trade rows AND no daily_engine_log entry at all — the system may
+// genuinely not have run (a real gap, worth flagging) or the day may just be a weekend (expected,
+// not worth flagging the same way). "today" is its own case: rather than "no data" (which reads as
+// something having gone wrong), it's just not this day's turn yet.
+function CalendarGapRow({ day, kind }: { day: string; kind: 'weekend' | 'weekday' | 'today' }) {
+  if (kind === 'today') {
+    return (
+      <TableRow className="hover:bg-transparent">
+        <TableCell colSpan={8} className="py-3">
+          <div className="rounded-md border border-pending/50 bg-pending/10 px-3 py-2 text-center text-sm font-medium text-pending">
+            Waiting for today&apos;s algorithm run
+          </div>
+        </TableCell>
+      </TableRow>
+    );
+  }
+
+  const isWeekend = kind === 'weekend';
+  return (
+    <TableRow className="hover:bg-transparent">
+      <TableCell colSpan={8} className="py-3">
+        <div
+          className={cn(
+            'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-md border px-3 py-2 text-sm',
+            isWeekend
+              ? 'border-muted-foreground/30 bg-muted/30 text-muted-foreground'
+              : 'border-pending/50 bg-pending/10 text-pending',
+          )}
+        >
+          <span className="font-semibold">{formatRelativeLogDate(day)}</span>
+          <span>{isWeekend ? 'Market closed — weekend' : 'No data — algorithm may not have run'}</span>
         </div>
       </TableCell>
     </TableRow>

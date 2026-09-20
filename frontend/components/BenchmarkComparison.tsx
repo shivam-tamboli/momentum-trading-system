@@ -83,24 +83,36 @@ export function BenchmarkComparison({ benchmark, isLoading }: BenchmarkCompariso
       </p>
 
       <div className="grid grid-cols-2 gap-4">
-        <div className="rounded-md border border-border bg-card px-4 py-3">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">Your Portfolio</p>
+        <div
+          className={cn(
+            'rounded-lg border-t-4 bg-muted/20 px-4 py-4',
+            portfolioPct >= 0 ? 'border-t-gain' : 'border-t-loss'
+          )}
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Your Portfolio
+          </p>
           <p
             className={cn(
-              'mt-1 font-mono text-2xl font-bold tabular-nums',
+              'mt-1.5 font-mono text-3xl font-extrabold tabular-nums',
               portfolioPct >= 0 ? 'text-gain' : 'text-loss'
             )}
           >
             {percent.format(portfolioPct)}
           </p>
         </div>
-        <div className="rounded-md border border-border bg-card px-4 py-3">
-          <p className="text-xs text-muted-foreground uppercase tracking-wide">
+        <div
+          className={cn(
+            'rounded-lg border-t-4 bg-muted/20 px-4 py-4',
+            indexPct >= 0 ? 'border-t-gain' : 'border-t-loss'
+          )}
+        >
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
             {benchmark.selected_index} ({benchmark.index_symbol})
           </p>
           <p
             className={cn(
-              'mt-1 font-mono text-2xl font-bold tabular-nums',
+              'mt-1.5 font-mono text-3xl font-extrabold tabular-nums',
               indexPct >= 0 ? 'text-gain' : 'text-loss'
             )}
           >

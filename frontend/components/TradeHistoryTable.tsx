@@ -32,6 +32,11 @@ const STATUS_ICONS: Record<DailyTradeItem['status'], typeof CheckCircle2> = {
   FAILED: XCircle,
 };
 
+// Lighter than the table primitive's default (font-medium, full-strength foreground) — this table
+// packs in colored badges and icons on every data row, so a heavy header competes with them
+// instead of receding behind them the way a column label should.
+const HEADER_CELL_CLASS = 'text-xs font-normal text-muted-foreground';
+
 const currency = new Intl.NumberFormat('en-US', {
   style: 'currency',
   currency: 'USD',
@@ -197,14 +202,14 @@ export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistory
     <Table>
       <TableHeader>
         <TableRow>
-          <TableHead>Symbol</TableHead>
-          <TableHead>Index</TableHead>
-          <TableHead>Action</TableHead>
-          <TableHead>Status</TableHead>
-          <TableHead className="text-right">Amount</TableHead>
-          <TableHead className="text-right">Price / Share</TableHead>
-          <TableHead className="text-right">Quantity</TableHead>
-          <TableHead>Traded At</TableHead>
+          <TableHead className={HEADER_CELL_CLASS}>Symbol</TableHead>
+          <TableHead className={HEADER_CELL_CLASS}>Index</TableHead>
+          <TableHead className={HEADER_CELL_CLASS}>Action</TableHead>
+          <TableHead className={HEADER_CELL_CLASS}>Status</TableHead>
+          <TableHead className={cn(HEADER_CELL_CLASS, 'text-right')}>Amount</TableHead>
+          <TableHead className={cn(HEADER_CELL_CLASS, 'text-right')}>Price / Share</TableHead>
+          <TableHead className={cn(HEADER_CELL_CLASS, 'text-right')}>Quantity</TableHead>
+          <TableHead className={HEADER_CELL_CLASS}>Traded At</TableHead>
         </TableRow>
       </TableHeader>
       <TableBody>

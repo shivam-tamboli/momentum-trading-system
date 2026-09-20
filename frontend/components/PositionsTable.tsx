@@ -19,6 +19,12 @@ const percent = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 2,
 });
 
+// Fractional-share quantities come back from Alpaca with 8+ decimal places of float precision —
+// real for the underlying share count, but far more than anyone reading the table needs to see.
+function formatQuantity(qty: number): string {
+  return qty.toFixed(4);
+}
+
 interface PositionsTableProps {
   positions: PositionItem[] | undefined;
   isLoading: boolean;
@@ -71,7 +77,7 @@ export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
                   {currency.format(position.current_price)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
-                  {position.qty}
+                  {formatQuantity(position.qty)}
                 </TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {currency.format(position.market_value)}

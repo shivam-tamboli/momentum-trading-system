@@ -167,10 +167,13 @@ function buildRenderItems(trades: DailyTradeItem[], engineLog: EngineLogItem[]):
       items.push(...chunk);
     } else if (summaryDays.has(cursor)) {
       items.push({ type: 'log-summary', day: cursor, entry: summaryDays.get(cursor)! });
+    } else if (isWeekendUtc(cursor)) {
+      // Checked before the "today" case, deliberately — a weekend is a weekend regardless of
+      // whether it happens to be today. "Waiting for today's algorithm run" would otherwise
+      // wrongly appear on a Saturday/Sunday, when nothing was ever going to run today at all.
+      items.push({ type: 'calendar-gap', day: cursor, kind: 'weekend' });
     } else if (cursor === today) {
       items.push({ type: 'calendar-gap', day: cursor, kind: 'today' });
-    } else if (isWeekendUtc(cursor)) {
-      items.push({ type: 'calendar-gap', day: cursor, kind: 'weekend' });
     } else {
       items.push({ type: 'calendar-gap', day: cursor, kind: 'weekday' });
     }
@@ -333,7 +336,10 @@ function LogSummaryRow({ day, entry }: { day: string; entry: EngineLogItem }) {
 
   if (entry.job2_status === 'NO_REBALANCE_NEEDED') {
     label = 'No rebalancing needed';
-    styles = 'border-gain/50 bg-gain/10 text-gain';
+    // Muted, same as every other non-trade informational row (weekend, market-closed) — this is
+    // routine, expected behavior, not a positive event that deserves to stand out with color.
+    // Only actual BUY/SELL trade rows use colored badges.
+    styles = 'border-muted-foreground/30 bg-muted/30 text-muted-foreground';
     detail = (
       <>
         <span>✓ Holdings already match today&apos;s top 5</span>

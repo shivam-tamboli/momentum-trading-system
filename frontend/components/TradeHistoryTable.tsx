@@ -1,4 +1,3 @@
-import type { ReactNode } from 'react';
 import { CheckCircle2, Clock, Receipt, XCircle } from 'lucide-react';
 import {
   Table,
@@ -274,11 +273,15 @@ export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistory
             }
 
             if (item.type === 'log-summary') {
-              return <LogSummaryRow key={`log-${item.day}`} day={item.day} entry={item.entry} />;
+              return (
+                <InfoRow key={`log-${item.day}`} day={item.day} label={engineLogLabel(item.entry)} />
+              );
             }
 
             if (item.type === 'calendar-gap') {
-              return <CalendarGapRow key={`gap-${item.day}`} day={item.day} kind={item.kind} />;
+              return (
+                <InfoRow key={`gap-${item.day}`} day={item.day} label={calendarGapLabel(item.kind)} />
+              );
             }
 
             const trade = item.trade;
@@ -327,90 +330,52 @@ export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistory
   );
 }
 
-// One row per day with an engine-log entry but no trades — the exact gap that used to render as
-// nothing at all. Three job2_status outcomes get their own message; everything else (COMPLETED
-// with no trades, which shouldn't normally happen since a real buy/sell always writes a
-// daily_trade row, or a NOT_RUN that slipped through) falls back to the raw rebalance_summary text
-// rather than silently dropping the day.
-function LogSummaryRow({ day, entry }: { day: string; entry: EngineLogItem }) {
-  const top5List = entry.top5_symbols ? entry.top5_symbols.split(',').join(', ') : null;
-
-  let label: string;
-  let detail: ReactNode;
-  let styles: string;
-
-  if (entry.job2_status === 'NO_REBALANCE_NEEDED') {
-    label = 'No rebalancing needed';
-    // Muted, same as every other non-trade informational row (weekend, market-closed) — this is
-    // routine, expected behavior, not a positive event that deserves to stand out with color.
-    // Only actual BUY/SELL trade rows use colored badges.
-    styles = 'border-muted-foreground/30 bg-muted/30 text-muted-foreground';
-    detail = (
-      <>
-        <span>✓ Holdings already match today&apos;s top 5</span>
-        {top5List && <span className="font-mono text-xs opacity-90">{top5List}</span>}
-      </>
-    );
-  } else if (entry.job2_status === 'MARKET_CLOSED') {
-    label = 'Market closed';
-    styles = 'border-muted-foreground/30 bg-muted/30 text-muted-foreground';
-    detail = <span>Market closed — no trades executed</span>;
-  } else if (entry.job2_status === 'FAILED') {
-    label = 'Trading failed';
-    styles = 'border-destructive/50 bg-destructive/10 text-destructive';
-    detail = <span>Trading failed — check system logs</span>;
-  } else {
-    label = entry.job2_status;
-    styles = 'border-muted-foreground/30 bg-muted/30 text-muted-foreground';
-    detail = <span>{entry.rebalance_summary ?? 'No further detail recorded.'}</span>;
+// Short, single-line label for a day with an engine-log entry but no trades — the exact gap that
+// used to render as nothing at all. No stock symbols, no checkmarks: just what happened, in the
+// same terse register as the real trade day separator's "2 buys, 1 sell" summary.
+function engineLogLabel(entry: EngineLogItem): string {
+  switch (entry.job2_status) {
+    case 'NO_REBALANCE_NEEDED':
+      return 'No rebalancing needed';
+    case 'MARKET_CLOSED':
+      return 'Market closed';
+    case 'FAILED':
+      return 'Trading failed — check system logs';
+    default:
+      // COMPLETED with no trades shouldn't normally happen (a real buy/sell always writes a
+      // daily_trade row), and NOT_RUN is filtered out before this is ever called — falls back to
+      // the raw summary rather than silently dropping the day.
+      return entry.rebalance_summary ?? entry.job2_status;
   }
-
-  return (
-    <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={8} className="py-3">
-        <div className={cn('space-y-1 rounded-md border px-3 py-2 text-sm', styles)}>
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
-            <span className="font-semibold">{formatRelativeLogDate(day)}</span>
-            <span className="font-medium">{label}</span>
-          </div>
-          <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">{detail}</div>
-        </div>
-      </TableCell>
-    </TableRow>
-  );
 }
 
 // A calendar day with no daily_trade rows AND no daily_engine_log entry at all — the system may
 // genuinely not have run (a real gap, worth flagging) or the day may just be a weekend (expected,
 // not worth flagging the same way). "today" is its own case: rather than "no data" (which reads as
 // something having gone wrong), it's just not this day's turn yet.
-function CalendarGapRow({ day, kind }: { day: string; kind: 'weekend' | 'weekday' | 'today' }) {
-  if (kind === 'today') {
-    return (
-      <TableRow className="hover:bg-transparent">
-        <TableCell colSpan={8} className="py-3">
-          <div className="rounded-md border border-pending/50 bg-pending/10 px-3 py-2 text-center text-sm font-medium text-pending">
-            Waiting for today&apos;s algorithm run
-          </div>
-        </TableCell>
-      </TableRow>
-    );
+function calendarGapLabel(kind: 'weekend' | 'weekday' | 'today'): string {
+  switch (kind) {
+    case 'today':
+      return "Waiting for today's algorithm run";
+    case 'weekend':
+      return 'Market closed — weekend';
+    case 'weekday':
+      return 'No data — algorithm may not have run';
   }
+}
 
-  const isWeekend = kind === 'weekend';
+// Every non-trade informational row (log-summary or calendar-gap) renders through this one
+// component, using the exact same markup as the regular trade-day separator above: a subtle
+// background tint on the row itself, date on the left, a short label on the right — no bordered
+// card, no color-coded background, no icons, no stock symbols. These rows report routine or
+// unremarkable engine activity, not something that needs to visually compete with an actual trade.
+function InfoRow({ day, label }: { day: string; label: string }) {
   return (
     <TableRow className="hover:bg-transparent">
-      <TableCell colSpan={8} className="py-3">
-        <div
-          className={cn(
-            'flex flex-wrap items-center justify-between gap-x-4 gap-y-1 rounded-md border px-3 py-2 text-sm',
-            isWeekend
-              ? 'border-muted-foreground/30 bg-muted/30 text-muted-foreground'
-              : 'border-pending/50 bg-pending/10 text-pending',
-          )}
-        >
-          <span className="font-semibold">{formatRelativeLogDate(day)}</span>
-          <span>{isWeekend ? 'Market closed — weekend' : 'No data — algorithm may not have run'}</span>
+      <TableCell colSpan={8} className="bg-muted/30 py-2">
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 text-xs">
+          <span className="font-semibold text-foreground">{formatRelativeLogDate(day)}</span>
+          <span className="text-muted-foreground">{label}</span>
         </div>
       </TableCell>
     </TableRow>

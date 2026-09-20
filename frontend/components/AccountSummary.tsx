@@ -31,11 +31,6 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
   const dayDeltaPercent = hasDelta ? dayDelta / account.last_equity : 0;
   const isPositiveDelta = dayDelta >= 0;
 
-  const secondaryStats = [
-    { label: 'Cash', value: account?.cash },
-    { label: 'Buying Power', value: account?.buying_power },
-  ];
-
   return (
     <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
       <Card className="lg:col-span-2">
@@ -69,26 +64,20 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-2 gap-4 lg:grid-cols-1">
-        {secondaryStats.map((stat) => (
-          <Card key={stat.label}>
-            <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-muted-foreground">
-                {stat.label}
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              {isLoading || stat.value === undefined ? (
-                <Skeleton className="h-8 w-24" />
-              ) : (
-                <p className="font-mono text-2xl font-bold tabular-nums">
-                  {currency.format(stat.value)}
-                </p>
-              )}
-            </CardContent>
-          </Card>
-        ))}
-      </div>
+      <Card>
+        <CardHeader className="pb-2">
+          <CardTitle className="text-sm font-medium text-muted-foreground">Cash</CardTitle>
+        </CardHeader>
+        <CardContent>
+          {isLoading || account?.cash === undefined ? (
+            <Skeleton className="h-8 w-24" />
+          ) : (
+            <p className="font-mono text-2xl font-bold tabular-nums">
+              {currency.format(account.cash)}
+            </p>
+          )}
+        </CardContent>
+      </Card>
     </div>
   );
 }

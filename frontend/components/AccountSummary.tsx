@@ -37,7 +37,7 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
   ];
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3">
+    <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
       <Card className="lg:col-span-2">
         <CardHeader className="pb-2">
           <CardTitle className="text-sm font-medium text-muted-foreground">
@@ -79,9 +79,9 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
             </CardHeader>
             <CardContent>
               {isLoading || stat.value === undefined ? (
-                <Skeleton className="h-7 w-24" />
+                <Skeleton className="h-8 w-24" />
               ) : (
-                <p className="font-mono text-xl font-semibold tabular-nums">
+                <p className="font-mono text-2xl font-bold tabular-nums">
                   {currency.format(stat.value)}
                 </p>
               )}

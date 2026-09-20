@@ -31,10 +31,32 @@ const percent = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 });
 
-const SIZE = 160;
-const STROKE = 28;
+const SIZE = 200;
+const STROKE = 32;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
+
+// Legend space is tight and Alpaca/exchange-provided names carry a lot of boilerplate a ticker
+// symbol already implies ("Moderna, Inc. Common Stock" — the "Inc." and "Common Stock" tell a
+// reader nothing the MRNA badge next to it doesn't). Order matters: the more specific patterns
+// ("Incorporated", "Corporation") run before the short, generic ones ("Inc", "Corp") so the short
+// ones can't match a prefix of the long ones and leave a mangled remainder behind.
+const NAME_SUFFIX_PATTERNS: RegExp[] = [
+  /\bCommon Stock\b/gi,
+  /\bClass [A-Z]\b/gi,
+  /\bIncorporated\b/gi,
+  /\bCorporation\b/gi,
+  /\bCorp\.?(?![a-zA-Z])/gi,
+  /\bInc\.?(?![a-zA-Z])/gi,
+];
+
+function shortCompanyName(name: string): string {
+  let result = name;
+  for (const pattern of NAME_SUFFIX_PATTERNS) {
+    result = result.replace(pattern, ' ');
+  }
+  return result.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
+}
 
 export function PortfolioComposition({ positions, isLoading }: PortfolioCompositionProps) {
   if (isLoading) {
@@ -100,8 +122,8 @@ export function PortfolioComposition({ positions, isLoading }: PortfolioComposit
           <div key={position.symbol} className="flex items-center justify-between gap-3 text-sm">
             <div className="flex min-w-0 items-center gap-2">
               <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', SLICE_DOT[colorIndex])} />
-              <span className="font-medium">{position.symbol}</span>
-              <span className="truncate text-muted-foreground">{position.name}</span>
+              <span className="font-bold">{position.symbol}</span>
+              <span className="truncate text-muted-foreground">{shortCompanyName(position.name)}</span>
             </div>
             <div className="flex shrink-0 items-center gap-3 font-mono tabular-nums">
               <span>{currency.format(position.market_value)}</span>

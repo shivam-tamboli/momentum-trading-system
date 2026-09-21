@@ -116,7 +116,8 @@ public class EmailService {
     // ---- Email 2: portfolio rebalanced, sent per user after their Job 2 rebalance completes ----
 
     public void sendPortfolioRebalancedEmail(User user, List<DailyTrade> bought, List<DailyTrade> sold,
-                                              BigDecimal portfolioValue, LocalDateTime tradedAtUtc) {
+                                              BigDecimal portfolioValue, LocalDateTime tradedAtUtc,
+                                              String skippedBuyReason) {
         String subject = "Portfolio Rebalanced | " + dateLabel(tradedAtUtc);
 
         StringBuilder body = new StringBuilder();
@@ -127,6 +128,13 @@ public class EmailService {
         appendTradeLines(body, bought);
         body.append("\nSold:\n");
         appendTradeLines(body, sold);
+
+        // Distinguishes "nothing new needed buying" from "wanted to buy but couldn't" — without
+        // this, a sell that ran fine while its paired buy silently failed reads identically to a
+        // rebalance that never needed to buy anything at all.
+        if (skippedBuyReason != null) {
+            body.append("\nNOTE — buying was skipped this run: ").append(skippedBuyReason).append("\n");
+        }
 
         BigDecimal boughtTotal = sumFilledAmount(bought);
         BigDecimal soldTotal = sumFilledAmount(sold);
@@ -154,7 +162,7 @@ public class EmailService {
 
     public void sendIndexSwitchEmail(User user, String previousIndex, String newIndex, BigDecimal investmentAmount,
                                       List<DailyTrade> sold, List<DailyTrade> bought, boolean marketWasOpen,
-                                      LocalDateTime switchedAtUtc) {
+                                      LocalDateTime switchedAtUtc, String skippedBuyReason) {
         String subject = "Index Switch Confirmed | " + dateLabel(switchedAtUtc);
 
         StringBuilder body = new StringBuilder();
@@ -172,6 +180,10 @@ public class EmailService {
             appendTradeLines(body, sold);
             body.append("\nBought:\n");
             appendTradeLines(body, bought);
+
+            if (skippedBuyReason != null) {
+                body.append("\nNOTE — buying was skipped: ").append(skippedBuyReason).append("\n");
+            }
         }
 
         send(EmailType.INDEX_SWITCH, user.getEmail(), subject, body.toString());

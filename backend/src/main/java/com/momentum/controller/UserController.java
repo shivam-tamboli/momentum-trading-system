@@ -47,15 +47,16 @@ public class UserController {
     @Value("${supabase.anon-key}")
     private String supabaseAnonKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
     private final UserRepository userRepository;
     private final EncryptionUtil encryptionUtil;
     private final DailyTradingService dailyTradingService;
     private final IndexSwitchHistoryRepository indexSwitchHistoryRepository;
 
-    public UserController(UserRepository userRepository, EncryptionUtil encryptionUtil,
+    public UserController(RestTemplate restTemplate, UserRepository userRepository, EncryptionUtil encryptionUtil,
                            DailyTradingService dailyTradingService,
                            IndexSwitchHistoryRepository indexSwitchHistoryRepository) {
+        this.restTemplate = restTemplate;
         this.userRepository = userRepository;
         this.encryptionUtil = encryptionUtil;
         this.dailyTradingService = dailyTradingService;

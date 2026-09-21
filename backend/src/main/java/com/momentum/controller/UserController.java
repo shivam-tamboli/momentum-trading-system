@@ -10,6 +10,7 @@ import com.momentum.service.DailyScoringService;
 import com.momentum.service.DailyTradingService;
 import com.momentum.service.IndexConstituentService;
 import com.momentum.util.EncryptionUtil;
+import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -164,9 +165,19 @@ public class UserController {
         return (String) SecurityContextHolder.getContext().getAuthentication().getPrincipal();
     }
 
+    // Guards against the race where two near-simultaneous first requests for a brand-new email
+    // (e.g. UserProvider resolving on mount and again on a Supabase auth-state-change event
+    // right after sign-in) both miss findByEmail and both try to insert. Whichever loses hits the
+    // unique constraint on email instead of the request failing outright — by the time that
+    // exception is thrown, the winner's row is already committed, so re-fetching finds it.
     private User findOrCreateUser(String email) {
-        return userRepository.findByEmail(email)
-                .orElseGet(() -> userRepository.save(new User(null, email, null, null, null, null, null)));
+        return userRepository.findByEmail(email).orElseGet(() -> {
+            try {
+                return userRepository.save(new User(null, email, null, null, null, null, null));
+            } catch (DataIntegrityViolationException e) {
+                return userRepository.findByEmail(email).orElseThrow(() -> e);
+            }
+        });
     }
 
     private MeResponse toMeResponse(User user) {

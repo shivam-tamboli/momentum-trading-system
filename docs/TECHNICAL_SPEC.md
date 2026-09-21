@@ -1,18 +1,14 @@
 # Technical Specification — Momentum Trading System
 
-This document is the source of truth for building this system.
-Read this fully before writing any code.
+This is the current technical contract for this system — what's actually built and running, not a plan for something yet to be built. If you're changing this system, read this first; if the code and this doc ever disagree, the code is right and this doc is stale.
 
 ---
 
 ## 1. What This System Does
 
-This is a weekly stock recommendation system. A momentum algorithm runs every week,
-scores stocks from four US market indexes, and recommends which stocks to BUY, SELL,
-or HOLD. Users connect their Alpaca paper trading account. The system places trades
-on their behalf using their Alpaca API key.
+This is a daily automatic rebalancing system. A momentum algorithm runs every trading morning before the market opens, scores stocks across four US indexes plus the full combined universe, and picks the top 5 per index. Users connect their Alpaca paper trading account, pick one of five tracked options (S&P 500, S&P 400, S&P 600, Nasdaq 100, or the full market), and set an investment amount. Every trading day, the system diffs each user's actual Alpaca holdings against that day's top 5 for their chosen index and rebalances automatically — sells what dropped out, buys what's newly in.
 
-**Users do not pick stocks. The algorithm decides.**
+**Users do not pick stocks, and users do not click a button to trade. The algorithm decides, and the schedule executes it.** The only trade a user directly causes is switching their tracked index, which immediately sells everything and buys the new index's top 5 (market permitting) rather than waiting for the next scheduled run.
 
 ---
 
@@ -20,240 +16,228 @@ on their behalf using their Alpaca API key.
 
 There are two completely different Alpaca API keys in this system:
 
-**System Key** (stored in environment variables)
-- Belongs to our application, not any user
-- Used ONLY for fetching historical stock price data from Alpaca
+**System key** (`ALPACA_SYSTEM_API_KEY` / `ALPACA_SYSTEM_API_SECRET`, environment variables only)
+- Belongs to the application, not any user
+- Used only for fetching historical price data during scoring
 - Never used for placing trades
 - Never stored in the database
 
-**User Key** (stored in the database, encrypted)
+**User key** (stored in the `users` table, encrypted)
 - Belongs to the individual user
-- Used ONLY for placing trades, checking account balance, and getting positions on behalf of that user
-- Stored encrypted in the USER table using AES-256 encryption
-- Decrypted in the service layer when needed, never exposed outside the service
+- Used only for placing trades, checking account balance, and reading positions on that user's behalf
+- Stored as AES-256-GCM ciphertext, prefixed `enc:v1:` so a future encryption format change can migrate safely without a hard cutover
+- Decrypted in the service layer only, right before an Alpaca call — never logged, never returned in any API response
 
 ---
 
-## 3. What Alpaca Manages (Do NOT duplicate in our code)
+## 3. What Alpaca Manages (do not duplicate in our code)
 
-Alpaca automatically handles the following for each user account. Do not build these yourself:
+Alpaca handles all of the following for each connected account. None of it is reimplemented here:
 
 - Cash balance and buying power
-- User's stock positions (what they own, quantity, average price)
-- Balance deduction after a buy order
-- Balance addition after a sell order
-- Fractional share calculation for dollar-based orders
+- Positions (what's held, quantity, average entry price)
+- Balance deduction after a buy, balance addition after a sell
+- Fractional-share calculation for dollar-based (notional) orders
 
-To get a user's balance: call `GET /account` using their key → Alpaca returns cash, buying_power, portfolio_value.
-To get a user's positions: call `GET /positions` using their key → Alpaca returns list of stocks they hold.
+To get a user's balance: call `GET /account` with their key → Alpaca returns cash, buying power, portfolio value, last equity.
+To get a user's positions: call `GET /positions` with their key → Alpaca returns everything they currently hold.
 
 ---
 
-## 4. Database — 5 Tables Only
+## 4. Database — 6 tables
 
-**Do not create any table not listed here.**
-**Do not create a Wallet table. Do not create a Position table.**
-**Alpaca manages wallet and positions.**
+**Do not add a wallet or positions table.** Alpaca is the source of truth for both; this system never mirrors either into its own database.
 
-### Table 1: USER
+### `users`
 ```sql
-id                        BIGINT PRIMARY KEY AUTO_INCREMENT
-email                     VARCHAR NOT NULL UNIQUE
-alpaca_api_key_encrypted  VARCHAR NOT NULL   -- AES-256 encrypted
-alpaca_api_secret_encrypted VARCHAR NOT NULL -- AES-256 encrypted
-created_at                TIMESTAMP DEFAULT NOW()
+id                          BIGINT PRIMARY KEY
+email                       VARCHAR NOT NULL UNIQUE
+alpaca_api_key_encrypted    VARCHAR              -- AES-256-GCM, enc:v1: prefix
+alpaca_api_secret_encrypted VARCHAR              -- AES-256-GCM, enc:v1: prefix
+selected_index              VARCHAR              -- one of the 5 values in section 1, or null if unset
+investment_amount           DECIMAL              -- per-rebalance-cycle amount, or null until set
+created_at                  TIMESTAMP
+```
+A row is created automatically the first time a logged-in user hits `/me` — there's no separate register step. `alpaca_api_key_encrypted`/`selected_index`/`investment_amount` all start null; the system won't trade for a user until all three are set.
+
+### `daily_recommendation`
+```sql
+id              BIGINT PRIMARY KEY
+filter_name     VARCHAR NOT NULL   -- which index this row belongs to
+symbol          VARCHAR NOT NULL
+name            VARCHAR NOT NULL
+momentum_score  DECIMAL NOT NULL
+ret_6m          DECIMAL
+ret_3m          DECIMAL
+ret_1m          DECIMAL
+vol_3m          DECIMAL
+scored_at       TIMESTAMP
+```
+Global, not per user — one set of top-5 rows per index per day, wiped and rewritten every morning Job 1 runs. `ret_*`/`vol_3m` are the formula's own inputs, kept alongside the score so the UI can show the breakdown, not just the final number.
+
+### `daily_trade`
+```sql
+id                BIGINT PRIMARY KEY
+user_id           BIGINT NOT NULL REFERENCES users(id)
+symbol            VARCHAR NOT NULL
+action            VARCHAR NOT NULL   -- BUY or SELL (no HOLD — a stock the system isn't touching just doesn't get a row)
+status            VARCHAR NOT NULL   -- FILLED, PENDING, or FAILED
+amount            DECIMAL            -- dollar amount, null until filled
+price_per_share   DECIMAL            -- null until filled
+quantity          DECIMAL            -- fractional shares supported
+alpaca_order_id   VARCHAR
+index_filter      VARCHAR            -- which index this trade was made under
+traded_at         TIMESTAMP
+```
+This is the audit log — every order placed through Alpaca, on this user's behalf, gets a row here regardless of how it turned out.
+
+### `index_switch_history`
+```sql
+id                BIGINT PRIMARY KEY
+user_id           BIGINT NOT NULL REFERENCES users(id)
+previous_index    VARCHAR            -- null on a user's very first pick
+new_index         VARCHAR NOT NULL
+investment_amount DECIMAL            -- the amount actually in effect at the moment of the switch
+switched_at       TIMESTAMP
 ```
 
-### Table 2: STOCK
+### `daily_engine_log`
 ```sql
-id          BIGINT PRIMARY KEY AUTO_INCREMENT
-symbol      VARCHAR NOT NULL   -- e.g. AAPL, MSFT, TSLA
-name        VARCHAR NOT NULL   -- e.g. Apple Inc.
-index_name  VARCHAR NOT NULL   -- one of: S&P 500, S&P 400, S&P 600, Nasdaq 100
+id                 BIGINT PRIMARY KEY
+user_id            BIGINT NOT NULL REFERENCES users(id)
+log_date           DATE NOT NULL     -- unique per (user_id, log_date)
+job1_status        VARCHAR NOT NULL  -- COMPLETED, FAILED, or NOT_RUN
+job2_status        VARCHAR NOT NULL  -- IN_PROGRESS, COMPLETED, NO_REBALANCE_NEEDED, MARKET_CLOSED, or FAILED
+top5_symbols       TEXT              -- comma-separated, for that day/index
+rebalance_summary  TEXT              -- plain-English one-liner, e.g. "Bought SNDK, MU. Sold INTC, PANW."
+portfolio_value    DECIMAL
+created_at         TIMESTAMP
 ```
+One row per user per trading day, written regardless of outcome — a day with zero trades still gets a row explaining why (market closed, holdings already matched, or a real failure). This is what lets Trade History show something honest for a day with no `daily_trade` rows, instead of a gap indistinguishable from "the system never ran."
 
-### Table 3: STOCK_PRICE
+### `scheduler_state`
 ```sql
-id          BIGINT PRIMARY KEY AUTO_INCREMENT
-stock_id    BIGINT NOT NULL REFERENCES STOCK(id)
-close_price DECIMAL(10,2) NOT NULL
-price_date  DATE NOT NULL
-fetched_at  TIMESTAMP DEFAULT NOW()
+id                       BIGINT PRIMARY KEY   -- single row, id = 1
+job1_last_run_date       DATE
+job1_last_success_date   DATE
+job2_last_run_date       DATE                 -- the real guard against re-running Job 2 twice in one day
+last_run_duration_ms     BIGINT
+last_run_stocks_scored   INT
+job2_missed_alert_date   DATE                 -- so the "trading window missed" email only ever sends once per day
 ```
-
-### Table 4: RECOMMENDATION
-```sql
-id              BIGINT PRIMARY KEY AUTO_INCREMENT
-stock_id        BIGINT NOT NULL REFERENCES STOCK(id)
-momentum_score  DECIMAL(10,6) NOT NULL
-action          VARCHAR NOT NULL   -- one of: BUY, SELL, HOLD
-index_name      VARCHAR NOT NULL   -- one of: S&P 500, S&P 400, S&P 600, Nasdaq 100
-week_date       DATE NOT NULL      -- Monday of the week this recommendation applies to
-created_at      TIMESTAMP DEFAULT NOW()
-```
-
-### Table 5: TRADE
-```sql
-id                BIGINT PRIMARY KEY AUTO_INCREMENT
-user_id           BIGINT NOT NULL REFERENCES USER(id)
-stock_id          BIGINT NOT NULL REFERENCES STOCK(id)
-recommendation_id BIGINT NOT NULL REFERENCES RECOMMENDATION(id)
-action            VARCHAR NOT NULL      -- BUY or SELL
-amount            DECIMAL(10,2) NOT NULL -- dollar amount
-price_per_share   DECIMAL(10,2) NOT NULL
-quantity          DECIMAL(10,6) NOT NULL -- fractional shares supported
-alpaca_order_id   VARCHAR NOT NULL       -- order ID returned by Alpaca
-traded_at         TIMESTAMP DEFAULT NOW()
-```
+Survives restarts on purpose — this state used to live only in memory, and a restart between Job 1 succeeding and Job 2 firing used to silently skip an entire trading day for every user.
 
 ---
 
 ## 5. Algorithm — Momentum Formula
 
-### Formula
+```
+momentum_score = (0.5 × ret_6m) + (0.3 × ret_3m) + (0.2 × ret_1m) − (0.1 × vol_3m)
+```
 
-momentum_score = (0.5 × ret_6m) + (0.3 × ret_3m) + (0.2 × ret_1m) - (0.1 × vol_3m)
+- `ret_6m` / `ret_3m` / `ret_1m` — percentage price change over each window: `(current_price − price_N_ago) / price_N_ago`
+- `vol_3m` — standard deviation of daily returns over the last 3 months. Higher volatility docks the score, even if the trend is up.
 
+The weights (0.5, 0.3, 0.2, 0.1) are constants in `DailyScoringService`. **Do not store them in the database** — nothing about this system expects them to be user-adjustable or tunable per run.
 
-### Variables
-- `ret_6m` — percentage return over the last 6 months: (current_price - price_6m_ago) / price_6m_ago
-- `ret_3m` — percentage return over the last 3 months: (current_price - price_3m_ago) / price_3m_ago
-- `ret_1m` — percentage return over the last 1 month: (current_price - price_1m_ago) / price_1m_ago
-- `vol_3m` — standard deviation of daily returns over the last 3 months (measures how much the price jumps around — higher is riskier, penalizes the score)
+Before a stock is scored at all, it has to clear two checks: at least 3 months of price history (otherwise a newly listed stock's short window would get miscounted as a full 6-month return), and the run as a whole has to successfully score at least 90% of the ~1,500-stock universe, or the entire run is thrown out and the prior day's recommendations are left in place. There is no BUY/SELL/HOLD label stored anywhere — a stock is either in an index's top 5 for the day or it isn't. Ranking happens per index (`filter_name`), independently — a stock's rank in the S&P 500 has nothing to do with its rank in the full-market universe.
 
-### Weights
-The weights (0.5, 0.3, 0.2, 0.1) are constants in the service code.
-**Do NOT store weights in the database.**
-
-### Ranking
-After calculating momentum_score for every stock in an index:
-- Top 10 scores → action = BUY
-- Bottom 10 scores → action = SELL
-- Everything in between → action = HOLD
-
-Save all results to the RECOMMENDATION table with the current week_date.
-
-### When It Runs
-Spring Scheduler triggers the algorithm every Monday at 9:00 AM EST
-(after US markets open).
-Cron expression: `0 0 9 * * MON`
+**When it runs:** not on a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and fires Job 1 once, somewhere in the 3-hour window before market open. A hardcoded time (the original design used `0 0 9 * * MON`, once a week) breaks the moment a holiday shifts market open — this doesn't have that failure mode.
 
 ---
 
 ## 6. API Endpoints
 
-Authentication is handled by Supabase Auth.
-Every request must include a valid Supabase JWT token in the Authorization header.
-The controller verifies the userId in the path exists in the USER table before calling the service.
-
-| Method | Path | Request Body | Response |
-|--------|------|-------------|---------|
-| GET | /:userId/account | none | { cash, buying_power, portfolio_value } |
-| GET | /:userId/positions | none | [ { symbol, qty, avg_entry_price, current_price, unrealized_pl } ] |
-| GET | /recommendations/snp500 | none | [ { symbol, name, momentum_score, action, week_date } ] |
-| GET | /recommendations/snp400 | none | [ { symbol, name, momentum_score, action, week_date } ] |
-| GET | /recommendations/snp600 | none | [ { symbol, name, momentum_score, action, week_date } ] |
-| GET | /recommendations/nasdaq100 | none | [ { symbol, name, momentum_score, action, week_date } ] |
-| POST | /:userId/trade/buy | { amount: number } | { trades: [ { symbol, amount_invested, shares_bought, price } ] } |
-| POST | /:userId/trade/sell | none | { trades: [ { symbol, shares_sold, amount_received } ] } |
-| GET | /:userId/trades | none | [ { symbol, action, amount, price_per_share, quantity, traded_at } ] |
-
-**There is no /auth/register or /auth/login endpoint. Supabase handles this.**
-**There is no /wallet/add-funds endpoint. Alpaca paper accounts start with $100,000.**
+See [`docs/api-endpoints.md`](api-endpoints.md) for the full table — kept in one place to avoid the two files drifting apart. Every request needs a Supabase JWT except `/admin/**` (`X-Admin-Key`) and `/health` (nothing). Every `:userId` route verifies the caller's own token actually resolves to that user before doing anything else.
 
 ---
 
-## 7. Buy Flow (step by step)
+## 7. Job 2 — Automatic Rebalance Flow (step by step)
 
-1. User sends POST /:userId/trade/buy { amount: 500 }
-2. Controller verifies userId exists in USER table
-3. Service reads this week's BUY recommendations from RECOMMENDATION table
-4. Service calls Alpaca GET /account using user's decrypted key → gets buying_power
-5. If amount > buying_power → return error "Insufficient balance in your Alpaca account"
-6. If amount <= buying_power → divide amount equally across all BUY recommended stocks
-7. For each stock: call Alpaca POST /orders { symbol, notional: amount_per_stock, side: buy, type: market }
-8. Alpaca returns { order_id, filled_price, filled_qty }
-9. Save each trade to TRADE table
-10. Return { trades: [ { symbol, amount_invested, shares_bought, price } ] } to user
+Nothing here is user-triggered on a normal day — this runs automatically, once per user, once per trading day.
 
----
+1. Scheduler confirms Job 1 succeeded today; if it didn't, Job 2 sits out entirely rather than rebalancing against stale data.
+2. For each user with a saved Alpaca key, an investment amount, and a chosen index: fetch their live positions from Alpaca (never from our own database — Alpaca is the only source of truth here).
+3. Fetch today's top 5 for that user's chosen index from `daily_recommendation`.
+4. Diff: symbols currently held but not in today's top 5 → sell. Symbols in today's top 5 but not currently held → buy. Everything else is left untouched.
+5. Sell first, fully, before any buy starts. Each sell order waits up to ~24 seconds for Alpaca to confirm a fill; if it doesn't confirm in time, the trade is recorded PENDING (not a fabricated fill) and gets picked up by Job 3 later.
+6. Buys are sized off the user's investment amount, split evenly across the *full* target allocation count — not just however many symbols happen to be new that day — minus a safety buffer, so a partial rotation doesn't get sized as if it were the only holding.
+7. Every attempted order — filled, pending, or failed — gets a row in `daily_trade`.
+8. A `daily_engine_log` row is written for the day regardless of outcome: real trades, "holdings already match, nothing to do," market was closed, or a failure with the reason.
+9. An email goes out to the user reporting what happened — including an explicit note if a buy was skipped (e.g. insufficient buying power) even though sells went through, rather than just silently reporting fewer trades than expected.
 
-## 8. Sell Flow (step by step)
-
-1. User sends POST /:userId/trade/sell
-2. Controller verifies userId exists in USER table
-3. Service reads this week's SELL recommendations from RECOMMENDATION table
-4. Service calls Alpaca GET /positions using user's decrypted key → gets current positions
-5. Find intersection: stocks user holds that are also on the SELL list
-6. If no intersection → return { message: "No positions match this week's sell recommendations" }
-7. For each matched stock: call Alpaca POST /orders { symbol, qty, side: sell, type: market }
-8. Alpaca returns { order_id, filled_price, filled_qty }
-9. Save each trade to TRADE table
-10. Return { trades: [ { symbol, shares_sold, amount_received } ] } to user
+Switching your tracked index (`POST /users/me/selected-index`) runs a variant of this immediately: sell 100% of current holdings first, fully, then buy the new index's top 5 — instead of only touching the delta.
 
 ---
 
-## 9. Weekly Recommendation Flow (step by step)
+## 8. Job 1 — Daily Scoring Flow (step by step)
 
-This runs automatically. No user triggers this.
+This runs automatically, once per trading day, before market open. No user triggers it.
 
-1. Spring Scheduler triggers every Monday at 9:00 AM EST
-2. Service reads all stocks from STOCK table (all 4 indexes)
-3. For each stock: call Alpaca GET /bars using system key → fetch 6 months of daily closing prices
-4. Save prices to STOCK_PRICE table
-5. For each stock: calculate ret_6m, ret_3m, ret_1m from STOCK_PRICE data
-6. For each stock: calculate vol_3m (standard deviation of daily returns over last 3 months)
-7. Apply formula: momentum_score = (0.5 × ret_6m) + (0.3 × ret_3m) + (0.2 × ret_1m) - (0.1 × vol_3m)
-8. Group stocks by index_name
-9. Per index: rank by momentum_score, label top 10 BUY, bottom 10 SELL, rest HOLD
-10. Save all recommendations to RECOMMENDATION table with week_date = current Monday
-11. Send email to all users: "New weekly recommendations are ready"
+1. In-process poller fires Job 1 once market open is within 3 hours, based on Alpaca's real clock, not a hardcoded time.
+2. Fetch 6 months of daily closing prices for every tracked symbol, using the **system** key, batched (200 symbols per request) and run in parallel — not one request per symbol.
+3. Per symbol: compute `ret_6m`, `ret_3m`, `ret_1m` from those prices, and `vol_3m` (standard deviation of daily returns over the last 3 months).
+4. Apply the formula in section 5.
+5. Group by index (`filter_name`), rank by `momentum_score`, keep the top 5 per index.
+6. If fewer than 90% of the universe scored successfully, throw out the entire run and keep yesterday's `daily_recommendation` rows in place — a partial or broken run never gets to publish a broken top 5.
+7. Otherwise: delete yesterday's rows and insert today's, in a single transaction (a crash between the delete and the insert must never leave the table empty).
+8. Send each user a "today's top 5" email for their tracked index.
 
 ---
 
-## 10. Security Rules
+## 9. Security Rules
 
-- Passwords: handled entirely by Supabase Auth — we never store passwords
-- User Alpaca API key: encrypted with AES-256 before storing in USER table
-- User Alpaca API secret: encrypted with AES-256 before storing in USER table
-- Decryption key: stored in environment variable ENCRYPTION_KEY — never in code or database
-- All API endpoints: protected by Supabase JWT token validation
-- System Alpaca key: stored in environment variables only — never in database
+- Passwords: handled entirely by Supabase Auth — never stored here.
+- Alpaca key/secret: AES-256-GCM encrypted before storing, keyed by `ENCRYPTION_KEY` — the app refuses to start if this isn't set, on purpose, rather than silently falling back to storing plaintext.
+- Decryption happens in the service layer only, right before the Alpaca call that needs it — a decrypted key is never logged, never returned in a response, never passed further than it has to be.
+- System Alpaca key: environment variables only, never the database.
+- Every endpoint needs a valid Supabase JWT, except `/admin/**` (a separate `X-Admin-Key`, reserved for the routes that actually place orders or trigger scoring) and `/health` (nothing, so an uptime monitor gets a real `200` instead of a `401`).
+- The JWT itself is verified once per request, by one filter (`JwtAuthFilter`), which resolves it to an email and stores that as the request's principal — every controller reads that instead of re-checking the token itself.
+- Every `:userId` route checks that the resolved principal actually owns that `userId` before doing anything. This wasn't always true — an earlier version trusted the number in the URL with no ownership check at all, letting any logged-in user read or affect any other user's account by changing one digit in the path.
 
 ---
 
-## 11. Environment Variables
-Alpaca System Account (for fetching market data only)
+## 10. Environment Variables
 
+Alpaca system account (market data only, never trading):
+```
 ALPACA_SYSTEM_API_KEY=
 ALPACA_SYSTEM_API_SECRET=
+```
 
-Database
-
+Database:
+```
 DB_URL=
 DB_USERNAME=
 DB_PASSWORD=
+```
 
-Encryption (for user Alpaca keys stored in DB)
-
+Encryption (for user Alpaca keys stored in the database):
+```
 ENCRYPTION_KEY=
+```
+Base64-encoded 256-bit key. No default — the app fails to start without it.
 
-Email (Spring Mail)
+Email (Resend's HTTPS API — not SMTP; Render's free tier blocks outbound SMTP on port 587 entirely, which used to just hang forever with no error):
+```
+RESEND_API_KEY=
+RESEND_FROM_ADDRESS=
+```
 
-MAIL_HOST=
-MAIL_PORT=
-MAIL_USERNAME=
-MAIL_PASSWORD=
-
-Supabase Auth
-
+Supabase Auth:
+```
 SUPABASE_URL=
 SUPABASE_ANON_KEY=
+```
 
+Admin routes (`/admin/**` — manual scoring/trading triggers, reconciliation, test email):
+```
+ADMIN_SECRET_KEY=
+```
 
 ---
 
-## 12. Maven Dependencies (Add to pom.xml)
+## 11. Maven Dependencies (current, `backend/pom.xml`)
 
 ```xml
 <!-- Alpaca Java SDK -->
@@ -275,29 +259,38 @@ SUPABASE_ANON_KEY=
     <artifactId>spring-boot-starter-data-jpa</artifactId>
 </dependency>
 
-<!-- Spring Boot Starter Mail -->
+<!-- Spring Security -->
 <dependency>
     <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-mail</artifactId>
+    <artifactId>spring-boot-starter-security</artifactId>
 </dependency>
 
 <!-- PostgreSQL Driver -->
 <dependency>
     <groupId>org.postgresql</groupId>
     <artifactId>postgresql</artifactId>
+    <scope>runtime</scope>
 </dependency>
 
-<!-- Supabase JWT Validation -->
+<!-- jjwt — present as a dependency, but NOT what actually verifies tokens today.
+     JwtAuthFilter delegates verification to a live call against Supabase's own
+     /auth/v1/user endpoint instead of parsing/validating the JWT locally. -->
 <dependency>
     <groupId>io.jsonwebtoken</groupId>
     <artifactId>jjwt-api</artifactId>
     <version>0.12.3</version>
 </dependency>
-
-<!-- Spring Security -->
 <dependency>
-    <groupId>org.springframework.boot</groupId>
-    <artifactId>spring-boot-starter-security</artifactId>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-impl</artifactId>
+    <version>0.12.3</version>
+    <scope>runtime</scope>
+</dependency>
+<dependency>
+    <groupId>io.jsonwebtoken</groupId>
+    <artifactId>jjwt-jackson</artifactId>
+    <version>0.12.3</version>
+    <scope>runtime</scope>
 </dependency>
 
 <!-- Lombok (pinned to 1.18.42 — required for JDK 21 annotation processing compatibility) -->
@@ -307,19 +300,28 @@ SUPABASE_ANON_KEY=
     <version>1.18.42</version>
     <optional>true</optional>
 </dependency>
+
+<!-- Loads backend/.env for local development -->
+<dependency>
+    <groupId>io.github.cdimascio</groupId>
+    <artifactId>dotenv-java</artifactId>
+    <version>3.0.0</version>
+</dependency>
 ```
+
+There is no `spring-boot-starter-mail` — it was removed when email moved from SMTP to Resend's HTTPS API (email is sent with the same `RestTemplate` used elsewhere, not a dedicated mail client).
 
 ---
 
-## 13. Key Rules — Read Before Writing Any Code
+## 12. Key Rules
 
-1. Never create a Wallet table. Alpaca tracks user balance.
-2. Never create a Position table. Alpaca tracks user positions.
-3. Never store algorithm weights in the database. They are constants in the service code.
-4. Never use the system Alpaca key for placing trades.
-5. Never use the user Alpaca key for fetching market data.
-6. Always decrypt the user key inside the service layer only — never pass the raw key outside the service.
-7. Always check Alpaca account buying_power before placing a buy order.
-8. Always check Alpaca positions before placing a sell order.
-9. Recommendations are system-wide — not per user. One set of recommendations per week per index applies to all users.
-10. The TRADE table is our audit log. Every order placed through Alpaca must be saved here.
+1. Never create a wallet or positions table — Alpaca is the source of truth for both.
+2. Never store the momentum formula's weights in the database — they're constants in `DailyScoringService`.
+3. Never use the system Alpaca key for placing trades, and never use a user's key for fetching market data during scoring.
+4. Always decrypt a user's key inside the service layer, immediately before the Alpaca call that needs it — never pass a decrypted key any further than that.
+5. Always check buying power before a buy, always check live positions before a sell — both against Alpaca directly, never against a locally cached copy.
+6. Recommendations are index-scoped, not per-user — one set of top-5 rows per index per day applies to every user tracking that index.
+7. `daily_trade` is the audit log. Every order actually placed through Alpaca — filled, pending, or failed — gets a row.
+8. `daily_engine_log` gets a row every trading day regardless of outcome, including days with zero trades — a blank gap and "the system ran and correctly found nothing to do" must never look the same.
+9. Every `:userId` route must verify the caller's token actually resolves to that `userId` before touching anything. This is not optional and was, for a period, missing entirely.
+10. A failed non-critical operation (an email send, a `daily_engine_log` write) must never be allowed to abort the trading run it's reporting on. Log it, track it, move on.

@@ -1,5 +1,6 @@
 import { TrendingUp } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { BenchmarkResponse } from '@/lib/types';
@@ -7,6 +8,7 @@ import type { BenchmarkResponse } from '@/lib/types';
 interface BenchmarkComparisonProps {
   benchmark: BenchmarkResponse | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
 const percent = new Intl.NumberFormat('en-US', {
@@ -31,9 +33,17 @@ function formatPeriodStart(periodStart: string): string {
   return periodStartFormatter.format(new Date(year, month - 1, day));
 }
 
-export function BenchmarkComparison({ benchmark, isLoading }: BenchmarkComparisonProps) {
+export function BenchmarkComparison({ benchmark, isLoading, isError }: BenchmarkComparisonProps) {
   if (isLoading) {
     return <Skeleton className="h-32 w-full" />;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-32 items-center justify-center">
+        <ErrorState message="Couldn't load your benchmark comparison." />
+      </div>
+    );
   }
 
   if (!benchmark || !benchmark.selected_index) {

@@ -10,6 +10,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import { cn } from '@/lib/utils';
 import { formatFullDateTime, formatRelativeDate, formatRelativeLogDate } from '@/lib/freshness';
 import type { DailyTradeItem, EngineLogItem } from '@/lib/types';
@@ -191,9 +192,10 @@ interface TradeHistoryTableProps {
   trades: DailyTradeItem[] | undefined;
   engineLog: EngineLogItem[] | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
-export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistoryTableProps) {
+export function TradeHistoryTable({ trades, engineLog, isLoading, isError }: TradeHistoryTableProps) {
   const items = trades ? buildRenderItems(trades, engineLog ?? []) : [];
   const hasNothingAtAll = (!trades || trades.length === 0) && items.length === 0;
 
@@ -223,7 +225,15 @@ export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistory
             </TableRow>
           ))}
 
-        {!isLoading && hasNothingAtAll && (
+        {!isLoading && isError && (
+          <TableRow>
+            <TableCell colSpan={8}>
+              <ErrorState message="Couldn't load your trade history." />
+            </TableCell>
+          </TableRow>
+        )}
+
+        {!isLoading && !isError && hasNothingAtAll && (
           <TableRow>
             <TableCell colSpan={8}>
               <EmptyState
@@ -235,6 +245,7 @@ export function TradeHistoryTable({ trades, engineLog, isLoading }: TradeHistory
         )}
 
         {!isLoading &&
+          !isError &&
           items.map((item, i) => {
             if (item.type === 'day') {
               const { buys, sells, net } = daySummary(item.trades);

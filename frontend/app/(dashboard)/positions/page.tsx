@@ -25,7 +25,11 @@ export default function PositionsPage() {
 
       <Card>
         <CardContent>
-          <PositionsTable positions={positionsQuery.data} isLoading={positionsQuery.isLoading} />
+          <PositionsTable
+            positions={positionsQuery.data}
+            isLoading={positionsQuery.isLoading}
+            isError={positionsQuery.isError}
+          />
         </CardContent>
       </Card>
     </div>

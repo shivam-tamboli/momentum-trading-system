@@ -1,6 +1,7 @@
 'use client';
 
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCountUp } from '@/lib/useCountUp';
 import { cn } from '@/lib/utils';
@@ -20,9 +21,10 @@ const percent = new Intl.NumberFormat('en-US', {
 interface AccountSummaryProps {
   account: AccountResponse | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
-export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
+export function AccountSummary({ account, isLoading, isError }: AccountSummaryProps) {
   const animatedPortfolioValue = useCountUp(account?.portfolio_value);
 
   const hasDelta =
@@ -30,6 +32,16 @@ export function AccountSummary({ account, isLoading }: AccountSummaryProps) {
   const dayDelta = hasDelta ? account.portfolio_value - account.last_equity : 0;
   const dayDeltaPercent = hasDelta ? dayDelta / account.last_equity : 0;
   const isPositiveDelta = dayDelta >= 0;
+
+  if (isError) {
+    return (
+      <Card>
+        <CardContent className="pt-6">
+          <ErrorState message="Couldn't load your account summary." />
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <div className="grid gap-4 lg:grid-cols-3 lg:items-start">

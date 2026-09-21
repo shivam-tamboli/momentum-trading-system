@@ -9,6 +9,7 @@ import {
 } from '@/components/ui/table';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import { cn } from '@/lib/utils';
 import type { PositionItem } from '@/lib/types';
 
@@ -28,11 +29,12 @@ function formatQuantity(qty: number): string {
 interface PositionsTableProps {
   positions: PositionItem[] | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
 const COLUMN_COUNT = 7;
 
-export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
+export function PositionsTable({ positions, isLoading, isError }: PositionsTableProps) {
   return (
     <Table>
       <TableHeader>
@@ -58,7 +60,15 @@ export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
             </TableRow>
           ))}
 
-        {!isLoading && (!positions || positions.length === 0) && (
+        {!isLoading && isError && (
+          <TableRow>
+            <TableCell colSpan={COLUMN_COUNT}>
+              <ErrorState message="Couldn't load your positions." />
+            </TableCell>
+          </TableRow>
+        )}
+
+        {!isLoading && !isError && (!positions || positions.length === 0) && (
           <TableRow>
             <TableCell colSpan={COLUMN_COUNT}>
               <EmptyState icon={Briefcase} message="No open positions." />
@@ -67,6 +77,7 @@ export function PositionsTable({ positions, isLoading }: PositionsTableProps) {
         )}
 
         {!isLoading &&
+          !isError &&
           positions?.map((position) => {
             const isPositive = position.unrealized_pl >= 0;
             return (

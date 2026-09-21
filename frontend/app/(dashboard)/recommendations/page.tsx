@@ -30,7 +30,11 @@ function IndexTabContent({ index }: { index: SelectableIndex }) {
   return (
     <Card>
       <CardContent>
-        <DailyRecommendationsTable recommendations={query.data} isLoading={query.isLoading} />
+        <DailyRecommendationsTable
+          recommendations={query.data}
+          isLoading={query.isLoading}
+          isError={query.isError}
+        />
       </CardContent>
     </Card>
   );

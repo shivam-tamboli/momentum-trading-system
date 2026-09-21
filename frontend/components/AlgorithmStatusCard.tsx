@@ -1,4 +1,5 @@
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import {
@@ -15,6 +16,7 @@ interface AlgorithmStatusCardProps {
   recommendations: DailyRecommendationItem[] | undefined;
   engineStatus: EngineStatus | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
 const STATUS_STYLES = {
@@ -23,7 +25,7 @@ const STATUS_STYLES = {
   'market-closed': 'border-muted-foreground/30 bg-muted/30 text-muted-foreground',
 };
 
-export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading }: AlgorithmStatusCardProps) {
+export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading, isError }: AlgorithmStatusCardProps) {
   const scoredAt = recommendations && recommendations.length > 0 ? recommendations[0].scored_at : null;
   // engine-status is the source of truth; if it's ever unreachable, fall back to the old
   // elapsed-time heuristic rather than showing nothing.
@@ -38,6 +40,8 @@ export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading }
       <CardContent className="space-y-3">
         {isLoading ? (
           <Skeleton className="h-20 w-full" />
+        ) : isError ? (
+          <ErrorState message="Couldn't load algorithm status." />
         ) : !scoredAt ? (
           <p className="text-sm text-muted-foreground">The algorithm hasn&apos;t run yet.</p>
         ) : (

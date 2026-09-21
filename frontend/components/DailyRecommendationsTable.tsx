@@ -15,6 +15,7 @@ import {
 import { Badge } from '@/components/ui/badge';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import { ScoreCompositionBars } from '@/components/ScoreCompositionBars';
 import { Sparkline } from '@/components/Sparkline';
 import { cn } from '@/lib/utils';
@@ -30,6 +31,7 @@ import type { DailyRecommendationItem, StockPriceHistoryResponse } from '@/lib/t
 interface DailyRecommendationsTableProps {
   recommendations: DailyRecommendationItem[] | undefined;
   isLoading: boolean;
+  isError?: boolean;
   // Symbols the user currently holds — lets a row show "already held" next to the recommendation
   // instead of leaving it ambiguous whether this stock is about to be bought or already is one.
   // Optional: the standalone Recommendations page doesn't have positions data to pass in.
@@ -39,6 +41,7 @@ interface DailyRecommendationsTableProps {
 export function DailyRecommendationsTable({
   recommendations,
   isLoading,
+  isError,
   heldSymbols,
 }: DailyRecommendationsTableProps) {
   const [expandedSymbol, setExpandedSymbol] = useState<string | null>(null);
@@ -99,7 +102,15 @@ export function DailyRecommendationsTable({
               </TableRow>
             ))}
 
-          {!isLoading && (!recommendations || recommendations.length === 0) && (
+          {!isLoading && isError && (
+            <TableRow>
+              <TableCell colSpan={3}>
+                <ErrorState message="Couldn't load today's recommendations." />
+              </TableCell>
+            </TableRow>
+          )}
+
+          {!isLoading && !isError && (!recommendations || recommendations.length === 0) && (
             <TableRow>
               <TableCell colSpan={3}>
                 <EmptyState
@@ -111,6 +122,7 @@ export function DailyRecommendationsTable({
           )}
 
           {!isLoading &&
+            !isError &&
             recommendations?.map((rec) => {
               const isPositive = rec.momentum_score >= 0;
               // Explicit typeof checks, not just "!== null" — a field that's missing from the

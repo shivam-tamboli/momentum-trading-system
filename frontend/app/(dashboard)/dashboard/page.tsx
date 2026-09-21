@@ -149,7 +149,11 @@ export default function DashboardPage() {
         </div>
       )}
 
-      <AccountSummary account={accountQuery.data} isLoading={accountQuery.isLoading} />
+      <AccountSummary
+        account={accountQuery.data}
+        isLoading={accountQuery.isLoading}
+        isError={accountQuery.isError}
+      />
 
       <Card>
         <CardHeader>
@@ -157,7 +161,11 @@ export default function DashboardPage() {
           <CardDescription>How your portfolio has performed against your tracked index.</CardDescription>
         </CardHeader>
         <CardContent>
-          <BenchmarkComparison benchmark={benchmarkQuery.data} isLoading={benchmarkQuery.isLoading} />
+          <BenchmarkComparison
+            benchmark={benchmarkQuery.data}
+            isLoading={benchmarkQuery.isLoading}
+            isError={benchmarkQuery.isError}
+          />
         </CardContent>
       </Card>
 
@@ -167,7 +175,11 @@ export default function DashboardPage() {
           <CardDescription>How your investment is split across your current holdings.</CardDescription>
         </CardHeader>
         <CardContent>
-          <PortfolioComposition positions={positionsQuery.data} isLoading={positionsQuery.isLoading} />
+          <PortfolioComposition
+            positions={positionsQuery.data}
+            isLoading={positionsQuery.isLoading}
+            isError={positionsQuery.isError}
+          />
         </CardContent>
       </Card>
 
@@ -176,7 +188,11 @@ export default function DashboardPage() {
           <CardTitle>Your Positions</CardTitle>
         </CardHeader>
         <CardContent>
-          <PositionsTable positions={positionsQuery.data} isLoading={positionsQuery.isLoading} />
+          <PositionsTable
+            positions={positionsQuery.data}
+            isLoading={positionsQuery.isLoading}
+            isError={positionsQuery.isError}
+          />
         </CardContent>
       </Card>
 
@@ -185,6 +201,7 @@ export default function DashboardPage() {
           recommendations={dailyRecommendationsQuery.data}
           engineStatus={engineStatusQuery.data}
           isLoading={dailyRecommendationsQuery.isLoading || engineStatusQuery.isLoading}
+          isError={dailyRecommendationsQuery.isError || engineStatusQuery.isError}
         />
       )}
 
@@ -200,6 +217,7 @@ export default function DashboardPage() {
             <IndexPriceChart
               points={indexPriceQuery.data?.points}
               isLoading={indexPriceQuery.isLoading}
+              isError={indexPriceQuery.isError}
             />
           </CardContent>
         </Card>
@@ -217,6 +235,7 @@ export default function DashboardPage() {
             <DailyRecommendationsTable
               recommendations={dailyRecommendationsQuery.data}
               isLoading={dailyRecommendationsQuery.isLoading}
+              isError={dailyRecommendationsQuery.isError}
               heldSymbols={heldSymbols}
             />
           ) : (
@@ -236,6 +255,7 @@ export default function DashboardPage() {
             trades={dailyTradesQuery.data?.slice(0, tradeHistoryLimit)}
             engineLog={engineLogQuery.data}
             isLoading={dailyTradesQuery.isLoading || engineLogQuery.isLoading}
+            isError={dailyTradesQuery.isError || engineLogQuery.isError}
           />
           {dailyTradesQuery.data && dailyTradesQuery.data.length > tradeHistoryLimit && (
             <div className="flex justify-center">

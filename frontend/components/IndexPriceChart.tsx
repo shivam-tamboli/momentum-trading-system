@@ -6,11 +6,13 @@ import { useTheme } from 'next-themes';
 import { TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import type { IndexPricePoint } from '@/lib/types';
 
 interface IndexPriceChartProps {
   points: IndexPricePoint[] | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
 // Same real compiled hex values used for the rest of the theme-aware chart work — pulled from
@@ -30,7 +32,7 @@ const PALETTES = {
   },
 } as const;
 
-export function IndexPriceChart({ points, isLoading }: IndexPriceChartProps) {
+export function IndexPriceChart({ points, isLoading, isError }: IndexPriceChartProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const chartRef = useRef<IChartApi | null>(null);
   const [renderError, setRenderError] = useState<string | null>(null);
@@ -88,6 +90,14 @@ export function IndexPriceChart({ points, isLoading }: IndexPriceChartProps) {
 
   if (isLoading) {
     return <Skeleton className="h-[220px] w-full" />;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-[220px] items-center justify-center">
+        <ErrorState message="Couldn't load price history." />
+      </div>
+    );
   }
 
   if (renderError) {

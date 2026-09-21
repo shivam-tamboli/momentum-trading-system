@@ -1,5 +1,6 @@
 import { PieChart } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
+import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { cn } from '@/lib/utils';
 import type { PositionItem } from '@/lib/types';
@@ -7,6 +8,7 @@ import type { PositionItem } from '@/lib/types';
 interface PortfolioCompositionProps {
   positions: PositionItem[] | undefined;
   isLoading: boolean;
+  isError?: boolean;
 }
 
 interface Slice {
@@ -58,9 +60,17 @@ function shortCompanyName(name: string): string {
   return result.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
 }
 
-export function PortfolioComposition({ positions, isLoading }: PortfolioCompositionProps) {
+export function PortfolioComposition({ positions, isLoading, isError }: PortfolioCompositionProps) {
   if (isLoading) {
     return <Skeleton className="h-40 w-full" />;
+  }
+
+  if (isError) {
+    return (
+      <div className="flex h-40 items-center justify-center">
+        <ErrorState message="Couldn't load your portfolio composition." />
+      </div>
+    );
   }
 
   if (!positions || positions.length === 0) {

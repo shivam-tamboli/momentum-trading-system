@@ -12,13 +12,14 @@ flowchart TB
     BE -->|verify token| Supabase
     BE <--> DB[(Postgres)]
     BE <-->|market data + orders| Alpaca[Alpaca API]
+    BE -->|trade/scoring emails| Email[Resend API]
 
     GHA[GitHub Actions, daily] -->|fetch + validate| Sources[SSGA ETF holdings, SlickCharts]
     GHA -->|opens a PR if changed| Repo[4 ticker files in this repo]
     Repo -->|bundled at build time| BE
 ```
 
-The frontend never talks to Alpaca or Postgres directly. Everything goes through the backend, which checks the caller's Supabase token on every request. Index constituent data doesn't come from a live API call at request time at all — it's four text files built into the backend, kept current by a separate scheduled job. More on why below.
+The frontend never talks to Alpaca, Postgres, or Resend directly. Everything goes through the backend, which checks the caller's Supabase token on every request. Index constituent data doesn't come from a live API call at request time at all — it's four text files built into the backend, kept current by a separate scheduled job. More on why below. Email is a one-way, fire-and-forget HTTPS call — the backend never waits on a delivery confirmation to decide whether a trading run succeeded, and a failed send is logged and tracked, never allowed to fail the run it's reporting on.
 
 ## Daily trading engine flow
 
@@ -100,6 +101,7 @@ Before scoring, a stock has to clear two checks: at least 3 months of price hist
 erDiagram
     users ||--o{ daily_trade : "places"
     users ||--o{ index_switch_history : "switches index"
+    users ||--o{ daily_engine_log : "has one row per trading day"
 
     users {
         bigint id PK
@@ -128,8 +130,10 @@ erDiagram
         string status
         decimal amount
         decimal price_per_share
+        decimal quantity
         string alpaca_order_id
         string index_filter
+        timestamp traded_at
     }
     index_switch_history {
         bigint id PK
@@ -139,15 +143,33 @@ erDiagram
         decimal investment_amount
         timestamp switched_at
     }
+    daily_engine_log {
+        bigint id PK
+        bigint user_id FK
+        date log_date
+        string job1_status
+        string job2_status
+        string top5_symbols
+        string rebalance_summary
+        decimal portfolio_value
+        timestamp created_at
+    }
     scheduler_state {
         bigint id PK
+        date job1_last_run_date
         date job1_last_success_date
+        date job2_last_run_date
         bigint last_run_duration_ms
         int last_run_stocks_scored
+        date job2_missed_alert_date
     }
 ```
 
-`daily_trade` and `index_switch_history` both link to `users` — every trade and every index switch belongs to someone, and `index_switch_history` records the amount actually in effect at switch time, not whatever it's since changed to. `daily_recommendation` is global: it's today's top 5 for each index, the same for every user, wiped and rewritten each morning. The four `ret_*`/`vol_3m` columns are the momentum formula's own inputs, stored alongside the score so the recommendations table can show the breakdown, not just the final number. `scheduler_state` is a single row that survives restarts (why that matters is below) — `last_run_duration_ms` and `last_run_stocks_scored` exist so the metrics page still shows real numbers after a restart wipes the in-memory tracker.
+`daily_trade`, `index_switch_history`, and `daily_engine_log` all link to `users` — every trade, index switch, and daily log entry belongs to someone, and `index_switch_history` records the amount actually in effect at switch time, not whatever it's since changed to. `daily_recommendation` is global: it's today's top 5 for each index, the same for every user, wiped and rewritten each morning. The four `ret_*`/`vol_3m` columns are the momentum formula's own inputs, stored alongside the score so the recommendations table can show the breakdown, not just the final number.
+
+`daily_engine_log` is one row per user per trading day (unique on `user_id` + `log_date`), written by both Job 1 and Job 2 regardless of outcome — a plain "no rebalance needed" day gets a row just like a day with real trades, and so does a failure. `rebalance_summary` is a one-line plain-English description ("Bought SNDK, MU. Sold INTC, PANW.") kept alongside the machine-readable status. This table is also what Trade History uses to fill in a day that ran but placed zero trades — market closed, holdings already matched, or a genuine failure — instead of that day just showing up blank, indistinguishable from a day nothing ever ran at all.
+
+`scheduler_state` is a single row that survives restarts. `job2_last_run_date` is the real guard against re-running Job 2 twice on the same day no matter which of the three trigger paths (in-process poller, external cron, manual) fires first; `job2_missed_alert_date` makes sure the "trading window missed" email only ever sends once per day, not once per retry. `last_run_duration_ms` and `last_run_stocks_scored` exist so the metrics page still shows real numbers after a restart wipes the in-memory tracker.
 
 ## API endpoints
 
@@ -171,11 +193,14 @@ Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/ad
 | GET | `/:userId/account` | Live cash, buying power, portfolio value |
 | GET | `/:userId/positions` | Live positions from Alpaca |
 | GET | `/:userId/daily-trades` | This user's trade history |
+| GET | `/:userId/engine-log` | This user's `daily_engine_log` rows, for filling calendar gaps in Trade History |
 | GET | `/:userId/benchmark` | Portfolio return vs. tracked index return, same period |
+| GET | `/engine-status` | Whether today is a trading day and whether Job 1 / Job 2 have run |
 | GET | `/metrics` | Health, last scoring run, trade counts |
 | POST | `/admin/run-daily-scoring` | Manually trigger Job 1 |
 | POST | `/admin/run-daily-trading` | Manually trigger Job 2 |
 | POST | `/admin/reconcile-pending-trades` | Manually trigger Job 3 |
+| POST | `/admin/test-email` | On-demand send to confirm Resend is actually delivering |
 
 Every `:userId` route checks that the caller's token actually belongs to that user. That wasn't always true — see below.
 
@@ -190,6 +215,8 @@ Five pages behind login: Dashboard, Positions, Recommendations, Settings, System
 **Settings.** Connect an Alpaca key, set an investment amount, pick an index. Switching index sells everything currently held and buys the new index's top 5, with a confirmation dialog first since it's a real action with consequences. A Switch History table below the picker shows every past switch — previous index, new index, the dollar amount that was actually in effect at that moment, and when.
 
 **Positions.** The same live Alpaca data as the dashboard's positions card, as its own page with more room.
+
+**Failure handling.** Every data-fetching card checks for a failed request specifically, not just loading vs. loaded — a card that failed to fetch shows its own error state instead of quietly rendering as if the account just has nothing in it, which used to be indistinguishable from a real backend outage. The initial user-session check (`/me`, on login and on every Supabase auth-state change) retries up to 5 times with a delay before giving up, since a Render cold start can take 60-100+ seconds and a single failed attempt used to leave the whole app stuck on "Loading account…" forever with no way out except a manual page refresh. If it still fails after retrying, the user gets an explicit connection-error message and a "Try again" button instead of a silent, permanent blank state.
 
 ## Key technical decisions
 
@@ -232,6 +259,16 @@ Five pages behind login: Dashboard, Positions, Recommendations, Settings, System
 **A font variable pointing at itself.** `--font-sans: var(--font-sans)` in the theme config — circular, not aliasing the real Geist Sans variable Next.js injects, the same way `--font-mono` correctly does one line below it. A circular CSS variable resolves to invalid, and `font-family: var(--font-sans)` had no fallback list, so the entire app had been rendering in the browser's default font, not Geist Sans. I found it while chasing down a report that a badge looked misaligned next to some text — turned out the badge was fine, the font was wrong, and a fallback font's glyphs just sit at a different height than the one everything was actually designed around. Confirmed by logging into the live site and screenshotting it: every non-monospace element, clearly serif. One-line fix once the actual cause was found.
 
 **A keep-alive ping that only ever got a 401.** Every route required a Supabase JWT except `/admin/**` — including the bare root URL the keep-alive workflow and UptimeRobot were both pinging. The ping still reached the server and reset Render's idle timer (any HTTP request does that, regardless of status code), so it wasn't silently broken, but there was no way to look at a ping's response and confirm it actually worked. Added `/health`, excluded it from both the JWT filter and Spring Security's auth requirement, and pointed both pingers at it instead.
+
+**Alpaca credentials were stored in plaintext.** The columns were named `alpaca_api_key_encrypted` / `alpaca_api_secret_encrypted`, but nothing writing to them ever actually encrypted anything — real Alpaca keys and secrets sitting in the database as plain text, one leaked backup or compromised DB credential away from every connected account being fully exposed. Found this during a full adversarial security pass over the codebase (see below). Fixed with AES-256-GCM, keyed by an `ENCRYPTION_KEY` env var that isn't optional — the app won't start without it. Every encrypted value gets an `enc:v1:` prefix, and decrypting a value with no prefix just passes it through unchanged, so the one real existing user's plaintext key kept working through the deploy instead of needing a hard cutover. Verified by running the migration against production and confirming the `enc:v1:` prefix actually showed up on that user's row in the real database afterward, not just in a local test.
+
+**Email over SMTP just hung, forever, with no error.** Render's free tier blocks outbound SMTP on port 587 entirely. There was no explicit timeout anywhere in the original mail-sending code, so a blocked connection didn't fail fast — it just sat there until Spring's own defaults eventually gave up, and in the meantime every trading/scoring email silently never delivered. Fixed by dropping SMTP and `JavaMailSender` entirely and switching to a plain HTTPS POST against Resend's API — port 443 was never blocked — with a shared `RestTemplate` carrying explicit 5s connect / 10s read timeouts, so a slow or dead connection can now only ever stall for a few seconds, never indefinitely.
+
+**A full adversarial audit, and the four other critical gaps it turned up.** I went through the whole codebase specifically trying to break it, not defend it, and found (beyond the encryption and email issues above): a single failed audit-log write (`daily_engine_log`) could throw an exception that aborted the entire parallel rebalance batch mid-run, potentially skipping every other user still waiting their turn — fixed by wrapping every one of those writes so a logging failure can never take down the trading run it's supposed to be describing. Every outbound `RestTemplate` call (to Supabase, to Resend) had no configured timeout at all, meaning a slow third party could hang a request indefinitely — fixed with one shared `RestTemplate` bean carrying real timeouts, reused everywhere instead of each caller rolling its own. And the frontend's very first `/me` call, if it failed even once (a Render cold start is genuinely slow — 60 to 100+ seconds), left the whole app stuck on "Loading account…" forever, no retry, no error, no way out but a manual refresh — fixed with the retry-then-connection-error behavior described under Frontend above.
+
+**Six more real issues from the same audit.** `UserController` was independently re-verifying every request's token against Supabase a second time, even though `JwtAuthFilter` already resolves and verifies it once per request and stores the result — removed the redundant call, cutting real auth latency on the busiest controller in the app. A brand-new user's very first request had a genuine check-then-insert race: two near-simultaneous first calls for the same new email could both miss the existing-user lookup and both try to insert, and the loser crashed on the database's unique constraint instead of just working — fixed by catching that specific constraint violation and re-reading the row the winner just created. No frontend component checked `isError` on its data fetches, so a real backend failure rendered identically to "this account genuinely has nothing here yet" — added a distinct error state everywhere, so an outage looks like an outage. CORS only allowed one hardcoded production URL, so every single PR preview deployment silently failed to reach the real backend at all — switched to a wildcard scoped to this project's own Vercel deployments. And `buySymbols` could silently no-op after a paired sell had already executed — sold the old position, then quietly failed to buy the replacement (insufficient buying power, most commonly), with the rebalance email and the engine log both just saying nothing was bought, no explanation — fixed by having the buy step return why it skipped, and surfacing that reason in both places instead of swallowing it.
+
+**Trade History used to just go blank.** A day the engine actually ran but placed zero trades — market closed, holdings already matched today's top 5, or Job 2 genuinely failed — produced no row in Trade History at all, which looked identical to a day the system never ran on. Now every calendar day between the earliest known activity and today gets a row: a real trade if one happened, a plain-English summary pulled from `daily_engine_log` if the system ran but had nothing to trade, or an honest "no data — algorithm may not have run" if there's genuinely no record either way. Weekends get their own label instead of reading as an unexplained gap.
 
 ## Keeping the server awake
 

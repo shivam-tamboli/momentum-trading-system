@@ -3,7 +3,7 @@
 I built a system that trades stocks on its own, every day, based on price momentum. It scores around 1,500 stocks across four US indexes every morning before the market opens, picks the top 5 per index, and rebalances every connected user's account to match — no button to click, no manual approval step. It trades with fake money — Alpaca's paper trading API — so the mechanics are real but nothing here risks real cash.
 
 **Live demo:** https://momentum-trading-system-eight.vercel.app
-**Deep dive:** [ARCHITECTURE.md](ARCHITECTURE.md) — diagrams, algorithm details, database schema, API reference, technical decisions, and the real bugs I hit building this. It was last updated before a round of security/reliability fixes, so treat the code as the source of truth for anything that looks off.
+**Deep dive:** [ARCHITECTURE.md](ARCHITECTURE.md) — diagrams, algorithm details, database schema, API reference, technical decisions, and the real bugs I hit building this.
 
 ## How it actually runs
 

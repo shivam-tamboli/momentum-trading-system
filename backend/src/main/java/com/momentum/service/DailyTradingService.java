@@ -149,7 +149,12 @@ public class DailyTradingService {
         LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
         for (User user : eligibleUsers) {
             emailService.sendTradingWindowMissedEmail(user, now);
-            dailyEngineLogService.recordJob2Result(user, today, Job2Status.MARKET_CLOSED,
+            // recordJob2ResultSafely, not a direct call — a thrown exception here would break
+            // this loop for every remaining user and propagate up into
+            // DailyEngineSchedulerService.maybeAlertJob2Missed(), preventing job2MissedAlertDate
+            // from ever being set — which would re-fire this same "missed" alert (and duplicate
+            // emails) on every poll for the rest of the day instead of once.
+            recordJob2ResultSafely(user, today, Job2Status.MARKET_CLOSED,
                     "Market closed — no trades executed.", null);
         }
     }
@@ -174,8 +179,7 @@ public class DailyTradingService {
         // Written before any Alpaca call — if the JVM dies mid-run (crash, Render restart) this
         // row is the only trace that Job 2 ever started for this user today at all. Every branch
         // below overwrites it with a real outcome; this is not one of the terminal statuses.
-        dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.IN_PROGRESS,
-                "Rebalance in progress.", null);
+        recordJob2ResultSafely(user, tradingDay, Job2Status.IN_PROGRESS, "Rebalance in progress.", null);
 
         try {
             AlpacaAPI userAlpacaAPI = buildUserAlpacaAPI(user);
@@ -208,20 +212,39 @@ public class DailyTradingService {
             if (!sold.isEmpty() || !bought.isEmpty()) {
                 emailService.sendPortfolioRebalancedEmail(user, bought, sold, portfolioValue,
                         LocalDateTime.now(ZoneOffset.UTC));
-                dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.COMPLETED,
+                recordJob2ResultSafely(user, tradingDay, Job2Status.COMPLETED,
                         buildRebalanceSummary(bought, sold), portfolioValue);
             } else {
                 emailService.sendNoRebalancingNeededEmail(user, user.getSelectedIndex(), top5, portfolioValue,
                         LocalDateTime.now(ZoneOffset.UTC));
-                dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.NO_REBALANCE_NEEDED,
+                recordJob2ResultSafely(user, tradingDay, Job2Status.NO_REBALANCE_NEEDED,
                         "Holdings already match today's top 5. No trades placed.", portfolioValue);
             }
         } catch (MarketClosedException e) {
             log.info("Daily trading: skipping user {} — {}", user.getId(), e.getMessage());
-            dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.MARKET_CLOSED, e.getMessage(), null);
+            recordJob2ResultSafely(user, tradingDay, Job2Status.MARKET_CLOSED, e.getMessage(), null);
         } catch (Exception e) {
             log.error("Daily trading failed for user {}: {}", user.getId(), e.getMessage(), e);
-            dailyEngineLogService.recordJob2Result(user, tradingDay, Job2Status.FAILED, e.getMessage(), null);
+            recordJob2ResultSafely(user, tradingDay, Job2Status.FAILED, e.getMessage(), null);
+        }
+    }
+
+    // Every recordJob2Result call in rebalanceUser() goes through here instead of calling
+    // dailyEngineLogService directly. rebalanceUser runs inside
+    // eligibleUsers.parallelStream().forEach(...) — an uncaught exception from ANY of these calls
+    // (including the ones inside the catch blocks above) would abort the whole batch's forEach,
+    // potentially mid-way through other users' trades, before runDailyTradingIfNeeded() ever
+    // reaches state.setJob2LastRunDate(tradingDay). That leaves "today already ran" unset despite
+    // real trades having happened, and the next 15-minute scheduler retry would attempt to trade
+    // every eligible user all over again. A failure to write the audit log must never be worse
+    // than not writing it at all.
+    private void recordJob2ResultSafely(User user, LocalDate tradingDay, Job2Status status, String summary,
+                                         BigDecimal portfolioValue) {
+        try {
+            dailyEngineLogService.recordJob2Result(user, tradingDay, status, summary, portfolioValue);
+        } catch (Exception e) {
+            log.error("Daily trading: failed to record {} engine log for user {}: {}",
+                    status, user.getId(), e.getMessage(), e);
         }
     }
 

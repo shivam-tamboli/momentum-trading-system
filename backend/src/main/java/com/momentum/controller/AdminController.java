@@ -1,20 +1,15 @@
 package com.momentum.controller;
 
-import com.momentum.model.User;
-import com.momentum.repository.UserRepository;
 import com.momentum.service.DailyScoringService;
 import com.momentum.service.DailyTradingService;
 import com.momentum.service.EmailService;
 import com.momentum.service.TradeReconciliationService;
-import com.momentum.util.EncryptionUtil;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.LocalDateTime;
-import java.util.ArrayList;
-import java.util.List;
 
 @RestController
 @RequestMapping("/admin")
@@ -24,21 +19,15 @@ public class AdminController {
     private final DailyTradingService dailyTradingService;
     private final TradeReconciliationService tradeReconciliationService;
     private final EmailService emailService;
-    private final UserRepository userRepository;
-    private final EncryptionUtil encryptionUtil;
 
     public AdminController(DailyScoringService dailyScoringService,
                             DailyTradingService dailyTradingService,
                             TradeReconciliationService tradeReconciliationService,
-                            EmailService emailService,
-                            UserRepository userRepository,
-                            EncryptionUtil encryptionUtil) {
+                            EmailService emailService) {
         this.dailyScoringService = dailyScoringService;
         this.dailyTradingService = dailyTradingService;
         this.tradeReconciliationService = tradeReconciliationService;
         this.emailService = emailService;
-        this.userRepository = userRepository;
-        this.encryptionUtil = encryptionUtil;
     }
 
     // Manual triggers for development/testing of the daily engine — the scheduler and the
@@ -90,39 +79,5 @@ public class AdminController {
     }
 
     public record TestEmailResponse(boolean success, LocalDateTime sentAt, String error) {
-    }
-
-    // TEMPORARY — one-time migration for rows written back when EncryptionUtil was a pass-through
-    // no-op (see that class's javadoc). For every user, decrypt-then-re-encrypt their Alpaca
-    // key/secret: a legacy plaintext value (no "enc:v1:" prefix) comes back from decrypt()
-    // unchanged and gets genuinely encrypted for the first time; a value that's already encrypted
-    // decrypts correctly and gets re-encrypted with a fresh random IV — a no-op in effect, safe to
-    // call as many times as needed. Remove this endpoint once every existing user has been
-    // migrated (check: no row's alpaca_api_key_encrypted/alpaca_api_secret_encrypted lacks the
-    // "enc:v1:" prefix).
-    @PostMapping("/migrate-encryption")
-    public ResponseEntity<String> migrateEncryption() {
-        List<User> users = userRepository.findAll();
-        List<Long> migratedUserIds = new ArrayList<>();
-
-        for (User user : users) {
-            boolean changed = false;
-
-            if (user.getAlpacaApiKeyEncrypted() != null && !user.getAlpacaApiKeyEncrypted().isBlank()) {
-                user.setAlpacaApiKeyEncrypted(encryptionUtil.encrypt(encryptionUtil.decrypt(user.getAlpacaApiKeyEncrypted())));
-                changed = true;
-            }
-            if (user.getAlpacaApiSecretEncrypted() != null && !user.getAlpacaApiSecretEncrypted().isBlank()) {
-                user.setAlpacaApiSecretEncrypted(encryptionUtil.encrypt(encryptionUtil.decrypt(user.getAlpacaApiSecretEncrypted())));
-                changed = true;
-            }
-
-            if (changed) {
-                userRepository.save(user);
-                migratedUserIds.add(user.getId());
-            }
-        }
-
-        return ResponseEntity.ok("Migrated encryption for user ids: " + migratedUserIds);
     }
 }

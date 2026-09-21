@@ -206,14 +206,18 @@ public class DailyTradingService {
 
             // Single index for this whole run — both sides of the diff belong to it equally.
             List<DailyTrade> sold = sellSymbols(userAlpacaAPI, user, toSell, positionsBySymbol, user.getSelectedIndex());
-            List<DailyTrade> bought = buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size(), user.getSelectedIndex());
+            BuyOutcome buyOutcome = buySymbols(userAlpacaAPI, user, toBuy, top5Symbols.size(), user.getSelectedIndex());
+            List<DailyTrade> bought = buyOutcome.trades();
 
             BigDecimal portfolioValue = fetchPortfolioValue(userAlpacaAPI, user.getId());
-            if (!sold.isEmpty() || !bought.isEmpty()) {
+            // A buy skipped for a real reason (buying power, etc.) counts as something having
+            // happened this run even when it left no trade rows — otherwise it silently collapses
+            // into "holdings already match today's top 5", which is a different, false claim.
+            if (!sold.isEmpty() || !bought.isEmpty() || buyOutcome.skippedReason() != null) {
                 emailService.sendPortfolioRebalancedEmail(user, bought, sold, portfolioValue,
-                        LocalDateTime.now(ZoneOffset.UTC));
+                        LocalDateTime.now(ZoneOffset.UTC), buyOutcome.skippedReason());
                 recordJob2ResultSafely(user, tradingDay, Job2Status.COMPLETED,
-                        buildRebalanceSummary(bought, sold), portfolioValue);
+                        buildRebalanceSummary(bought, sold, buyOutcome.skippedReason()), portfolioValue);
             } else {
                 emailService.sendNoRebalancingNeededEmail(user, user.getSelectedIndex(), top5, portfolioValue,
                         LocalDateTime.now(ZoneOffset.UTC));
@@ -251,8 +255,8 @@ public class DailyTradingService {
     // "Bought PANW, CRWD. Sold INTC, SNDK." — lists every symbol actually attempted this run
     // regardless of fill status (FILLED/PENDING/FAILED), since all three are real outcomes of an
     // attempted order, not just successes.
-    private String buildRebalanceSummary(List<DailyTrade> bought, List<DailyTrade> sold) {
-        if (bought.isEmpty() && sold.isEmpty()) {
+    private String buildRebalanceSummary(List<DailyTrade> bought, List<DailyTrade> sold, String skippedBuyReason) {
+        if (bought.isEmpty() && sold.isEmpty() && skippedBuyReason == null) {
             return "Holdings already match today's top 5. No trades placed.";
         }
         StringBuilder summary = new StringBuilder();
@@ -268,6 +272,12 @@ public class DailyTradingService {
             summary.append("Sold ")
                     .append(sold.stream().map(DailyTrade::getSymbol).collect(Collectors.joining(", ")))
                     .append(".");
+        }
+        if (skippedBuyReason != null) {
+            if (summary.length() > 0) {
+                summary.append(" ");
+            }
+            summary.append("Buying skipped: ").append(skippedBuyReason).append(".");
         }
         return summary.toString();
     }
@@ -303,6 +313,7 @@ public class DailyTradingService {
 
         List<DailyTrade> sold = List.of();
         List<DailyTrade> bought = List.of();
+        String skippedBuyReason = null;
         boolean marketWasOpen = true;
 
         // Everything past this point is a best-effort immediate rebalance, not part of "did the
@@ -329,7 +340,9 @@ public class DailyTradingService {
                     newTop5.stream().map(DailyRecommendation::getSymbol).collect(Collectors.toSet());
 
             log.info("Index switch for user {}: buying top {} for {}", userId, newSymbols.size(), newIndex);
-            bought = buySymbols(userAlpacaAPI, user, newSymbols, newSymbols.size(), newIndex);
+            BuyOutcome buyOutcome = buySymbols(userAlpacaAPI, user, newSymbols, newSymbols.size(), newIndex);
+            bought = buyOutcome.trades();
+            skippedBuyReason = buyOutcome.skippedReason();
         } catch (MarketClosedException e) {
             marketWasOpen = false;
             log.info("Index switch for user {}: preference saved as {} — market closed, trading "
@@ -340,7 +353,7 @@ public class DailyTradingService {
         }
 
         emailService.sendIndexSwitchEmail(user, previousIndex, newIndex, user.getInvestmentAmount(),
-                sold, bought, marketWasOpen, LocalDateTime.now(ZoneOffset.UTC));
+                sold, bought, marketWasOpen, LocalDateTime.now(ZoneOffset.UTC), skippedBuyReason);
     }
 
     private List<DailyTrade> sellSymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
@@ -390,15 +403,29 @@ public class DailyTradingService {
     // sizing off symbols.size() instead would dump most of the day's investment amount into
     // whichever handful of stocks happen to be new, since already-held stocks that stayed in the
     // top 5 aren't touched by this call at all.
-    private List<DailyTrade> buySymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
-                                         int targetAllocationCount, String indexFilter) {
+    // Wraps buySymbols' result so a caller can tell "nothing needed buying" (skippedReason null,
+    // trades empty) apart from "wanted to buy but couldn't" (skippedReason set) — both used to
+    // collapse into the same empty list, which let a sell that ran fine while its paired buy
+    // silently failed look identical to a rebalance that never needed to buy anything at all.
+    private record BuyOutcome(List<DailyTrade> trades, String skippedReason) {
+        static BuyOutcome executed(List<DailyTrade> trades) {
+            return new BuyOutcome(trades, null);
+        }
+
+        static BuyOutcome skipped(String reason) {
+            return new BuyOutcome(List.of(), reason);
+        }
+    }
+
+    private BuyOutcome buySymbols(AlpacaAPI userAlpacaAPI, User user, Set<String> symbols,
+                                   int targetAllocationCount, String indexFilter) {
         if (symbols.isEmpty()) {
-            return List.of();
+            return BuyOutcome.executed(List.of());
         }
         if (targetAllocationCount <= 0) {
             log.warn("Daily trading: skipping buys for user {} — invalid target allocation count {}",
                     user.getId(), targetAllocationCount);
-            return List.of();
+            return BuyOutcome.skipped("invalid target allocation count");
         }
 
         // investment_amount is the user-set amount to invest per rebalance cycle (set once during
@@ -407,7 +434,7 @@ public class DailyTradingService {
         BigDecimal investmentAmount = user.getInvestmentAmount();
         if (investmentAmount == null) {
             log.info("Daily trading: skipping buys for user {} — no investment_amount set", user.getId());
-            return List.of();
+            return BuyOutcome.skipped("no investment amount set");
         }
 
         // Buffer is a safety margin only: never stored, never deducted from anything, never
@@ -422,21 +449,22 @@ public class DailyTradingService {
             availableBuyingPower = new BigDecimal(account.getBuyingPower());
         } catch (AlpacaClientException e) {
             log.warn("Daily trading: failed to fetch buying power for user {}: {}", user.getId(), e.getMessage());
-            return List.of();
+            return BuyOutcome.skipped("couldn't fetch your available buying power from Alpaca");
         }
 
         if (availableBuyingPower.compareTo(safeAmount) < 0) {
             log.warn("Insufficient buying power after buffer deduction for user {}", user.getId());
-            return List.of();
+            return BuyOutcome.skipped("insufficient buying power after reserving your safety buffer");
         }
 
         BigDecimal amountPerStock = safeAmount.divide(BigDecimal.valueOf(targetAllocationCount), 2, RoundingMode.DOWN);
         if (amountPerStock.compareTo(MIN_ORDER_SIZE) < 0) {
             log.warn("Investment amount too small after buffer deduction for user {}", user.getId());
-            return List.of();
+            return BuyOutcome.skipped("investment amount too small to split across "
+                    + targetAllocationCount + " stocks after the safety buffer");
         }
 
-        return symbols.parallelStream().map(symbol -> {
+        List<DailyTrade> trades = symbols.parallelStream().map(symbol -> {
             try {
                 Order order = userAlpacaAPI.orders().requestOrder(
                         symbol, null, amountPerStock.doubleValue(), OrderSide.BUY,
@@ -464,6 +492,8 @@ public class DailyTradingService {
                         indexFilter);
             }
         }).collect(Collectors.toList());
+
+        return BuyOutcome.executed(trades);
     }
 
     private DailyTrade saveTrade(User user, String symbol, ActionType action, TradeStatus status, BigDecimal amount,

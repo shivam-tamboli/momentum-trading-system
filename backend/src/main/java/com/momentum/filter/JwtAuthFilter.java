@@ -38,7 +38,11 @@ public class JwtAuthFilter extends OncePerRequestFilter {
     @Value("${supabase.anon-key}")
     private String supabaseAnonKey;
 
-    private final RestTemplate restTemplate = new RestTemplate();
+    private final RestTemplate restTemplate;
+
+    public JwtAuthFilter(RestTemplate restTemplate) {
+        this.restTemplate = restTemplate;
+    }
 
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {

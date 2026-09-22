@@ -6,6 +6,7 @@ public enum EmailType {
     INDEX_SWITCH,
     NO_REBALANCING_NEEDED,
     TRADING_WINDOW_MISSED,
+    SCORING_FAILED,
     TRADE_FAILED,
     TEST
 }

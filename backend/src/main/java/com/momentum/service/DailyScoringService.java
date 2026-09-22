@@ -223,7 +223,7 @@ public class DailyScoringService {
     // row for the job1/job2 date fields, so the two writers can't clobber each other's columns.
     private void persistRunStats(int stocksScored, long durationMs) {
         SchedulerState state = schedulerStateRepository.findById(SCHEDULER_STATE_ID)
-                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null, null));
+                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null, null, null));
         state.setLastRunStocksScored(stocksScored);
         state.setLastRunDurationMs(durationMs);
         schedulerStateRepository.save(state);
@@ -272,6 +272,18 @@ public class DailyScoringService {
     private void recordJob1Failure() {
         LocalDate today = LocalDate.now(ZoneOffset.UTC);
         for (User user : eligibleUsers()) {
+            dailyEngineLogService.recordJob1Result(user, today, Job1Status.FAILED, null);
+        }
+    }
+
+    // Sent once, to every eligible user, when the market opens with Job 1 never having completed
+    // successfully that day — see DailyEngineSchedulerService.maybeAlertJob1Failed. Also covers the
+    // case where Job 1 never got a chance to attempt at all (e.g. the backend was asleep for the
+    // entire 3-hour window), which recordJob1Failure()'s own call sites wouldn't have touched.
+    public void notifyScoringFailed(LocalDate today) {
+        LocalDateTime now = LocalDateTime.now(ZoneOffset.UTC);
+        for (User user : eligibleUsers()) {
+            emailService.sendScoringFailedEmail(user, now);
             dailyEngineLogService.recordJob1Result(user, today, Job1Status.FAILED, null);
         }
     }

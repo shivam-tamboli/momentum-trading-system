@@ -117,7 +117,7 @@ public class DailyTradingService {
         }
 
         log.info("Daily trading: running for {}", tradingDay);
-        runDailyTrading(tradingDay);
+        runDailyTrading(tradingDay, clock);
 
         state.setJob2LastRunDate(tradingDay);
         schedulerStateRepository.save(state);
@@ -159,7 +159,7 @@ public class DailyTradingService {
         }
     }
 
-    private void runDailyTrading(LocalDate tradingDay) {
+    private void runDailyTrading(LocalDate tradingDay, Clock clock) {
         List<User> eligibleUsers = userRepository.findAll().stream()
                 .filter(this::hasApiKey)
                 .filter(u -> u.getSelectedIndex() != null && !u.getSelectedIndex().isBlank())
@@ -167,10 +167,10 @@ public class DailyTradingService {
 
         log.info("Daily trading: {} users eligible (have a key and a selected index)", eligibleUsers.size());
 
-        eligibleUsers.parallelStream().forEach(user -> rebalanceUser(user, tradingDay));
+        eligibleUsers.parallelStream().forEach(user -> rebalanceUser(user, tradingDay, clock));
     }
 
-    private void rebalanceUser(User user, LocalDate tradingDay) {
+    private void rebalanceUser(User user, LocalDate tradingDay, Clock clock) {
         if (user.getInvestmentAmount() == null) {
             log.info("Daily trading: skipping auto-trading for user {} — no investment_amount set", user.getId());
             return;
@@ -183,7 +183,11 @@ public class DailyTradingService {
 
         try {
             AlpacaAPI userAlpacaAPI = buildUserAlpacaAPI(user);
-            checkMarketOpen(userAlpacaAPI);
+            // The market's open/closed state is a single global fact, already fetched once by
+            // runDailyTradingIfNeeded() before this batch started — asserting against that same
+            // Clock here instead of re-fetching per user avoids N redundant Alpaca API calls for
+            // a fact that can't differ from one user's account to another's.
+            assertMarketOpen(clock);
 
             List<Position> positions = fetchPositions(userAlpacaAPI, user.getId());
             Set<String> heldSymbols = positions.stream().map(Position::getSymbol).collect(Collectors.toSet());
@@ -544,6 +548,8 @@ public class DailyTradingService {
         }
     }
 
+    // Used only by switchIndex — a standalone, user-triggered action that isn't part of a batch
+    // already holding a freshly-fetched Clock, so it fetches its own right before checking it.
     private void checkMarketOpen(AlpacaAPI alpacaAPI) {
         Clock clock;
         try {
@@ -551,7 +557,10 @@ public class DailyTradingService {
         } catch (AlpacaClientException e) {
             throw new RuntimeException("Failed to fetch Alpaca market clock", e);
         }
+        assertMarketOpen(clock);
+    }
 
+    private void assertMarketOpen(Clock clock) {
         if (clock.getIsOpen() == null || !clock.getIsOpen()) {
             throw new MarketClosedException("Market is closed. It reopens at " + clock.getNextOpen() + ".");
         }

@@ -565,6 +565,13 @@ public class DailyTradingService {
                 if (order != null && order.getAverageFillPrice() != null && !order.getAverageFillPrice().isEmpty()) {
                     return order;
                 }
+            } catch (InterruptedException e) {
+                // Restore the interrupt flag immediately and stop polling — swallowing this
+                // silently would erase the signal, leaving nothing downstream aware the thread
+                // was asked to stop. The order itself keeps executing on Alpaca's side either
+                // way; a PENDING trade here just gets picked up by Job 3's reconciliation.
+                Thread.currentThread().interrupt();
+                return null;
             } catch (Exception e) {
                 log.warn("Retry {} waiting for fill on order {}", i + 1, orderId);
             }

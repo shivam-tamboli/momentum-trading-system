@@ -337,12 +337,12 @@ public class DailyScoringService {
             return false;
         }
         LocalDate earliestBarDate = bars.get(0).getTimestamp().toLocalDate();
-        LocalDate minimumRequiredStart = LocalDate.now().minusMonths(MINIMUM_HISTORY_MONTHS);
+        LocalDate minimumRequiredStart = LocalDate.now(ZoneOffset.UTC).minusMonths(MINIMUM_HISTORY_MONTHS);
         return !earliestBarDate.isAfter(minimumRequiredStart);
     }
 
     private Map<String, List<StockBar>> fetchBarsForBatch(List<String> batch) throws Exception {
-        ZonedDateTime end = ZonedDateTime.now();
+        ZonedDateTime end = ZonedDateTime.now(ZoneOffset.UTC);
         ZonedDateTime start = end.minusMonths(6);
 
         Map<String, List<StockBar>> allBars = new HashMap<>();
@@ -375,8 +375,8 @@ public class DailyScoringService {
 
         BigDecimal latestPrice = BigDecimal.valueOf(bars.get(bars.size() - 1).getClose());
         BigDecimal price6mAgo = BigDecimal.valueOf(bars.get(0).getClose());
-        BigDecimal price3mAgo = findPriceOnOrAfter(bars, LocalDate.now().minusMonths(3));
-        BigDecimal price1mAgo = findPriceOnOrAfter(bars, LocalDate.now().minusMonths(1));
+        BigDecimal price3mAgo = findPriceOnOrAfter(bars, LocalDate.now(ZoneOffset.UTC).minusMonths(3));
+        BigDecimal price1mAgo = findPriceOnOrAfter(bars, LocalDate.now(ZoneOffset.UTC).minusMonths(1));
 
         BigDecimal ret6m = calculateReturn(latestPrice, price6mAgo);
         BigDecimal ret3m = calculateReturn(latestPrice, price3mAgo);
@@ -415,7 +415,7 @@ public class DailyScoringService {
     }
 
     private BigDecimal calculateVolatility3m(List<StockBar> bars) {
-        LocalDate cutoff = LocalDate.now().minusMonths(3);
+        LocalDate cutoff = LocalDate.now(ZoneOffset.UTC).minusMonths(3);
 
         List<BigDecimal> closesInWindow = bars.stream()
                 .filter(bar -> !bar.getTimestamp().toLocalDate().isBefore(cutoff))

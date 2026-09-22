@@ -39,7 +39,7 @@ flowchart LR
     J --> K[Check Alpaca for any trade<br/>still stuck PENDING]
 ```
 
-A background poller checks Alpaca's clock every 60 seconds. Job 1 fires once, somewhere in the 3-hour window before open — a window, not one exact minute, so a slow poll can't cause the whole day to get skipped. Job 2 fires once, right at open, but only if Job 1 actually succeeded that same day. If scoring failed or never ran, trading sits out rather than rebalancing against yesterday's data. Job 3 runs on a plain cron at 21:00 UTC — no clock-polling needed, since it doesn't care exactly when the market closed, just that it did.
+A background poller checks Alpaca's clock every 60 seconds. Job 1 retries every 15 minutes within the 3-hour window before open, until it succeeds — a single transient failure (an Alpaca hiccup, a brief DB blip) gets more chances within the same window instead of silently skipping scoring for the entire day. If the window closes without ever succeeding, every eligible user gets a "Scoring Failed Today" email. Job 2 then retries every 15 minutes for as long as the market stays open, but only proceeds once Job 1 has actually succeeded that same day — if scoring never managed to complete, trading sits out rather than rebalancing against yesterday's data. Job 3 runs on a plain cron at 21:00 UTC — no clock-polling needed, since it doesn't care exactly when the market closed, just that it did.
 
 Job 3 exists because an order can outlive the code watching it. Job 2 waits about 24 seconds for each order to confirm a fill before moving on, so one slow order can't stall the whole run — but the order keeps executing on Alpaca's side either way. Anything still marked PENDING gets checked against Alpaca's own order record once daily and moved to FILLED or FAILED, so the trade history doesn't permanently show "pending" for something that resolved hours ago.
 
@@ -162,6 +162,7 @@ erDiagram
         bigint last_run_duration_ms
         int last_run_stocks_scored
         date job2_missed_alert_date
+        date job1_failed_alert_date
     }
 ```
 
@@ -169,7 +170,7 @@ erDiagram
 
 `daily_engine_log` is one row per user per trading day (unique on `user_id` + `log_date`), written by both Job 1 and Job 2 regardless of outcome — a plain "no rebalance needed" day gets a row just like a day with real trades, and so does a failure. `rebalance_summary` is a one-line plain-English description ("Bought SNDK, MU. Sold INTC, PANW.") kept alongside the machine-readable status. This table is also what Trade History uses to fill in a day that ran but placed zero trades — market closed, holdings already matched, or a genuine failure — instead of that day just showing up blank, indistinguishable from a day nothing ever ran at all.
 
-`scheduler_state` is a single row that survives restarts. `job2_last_run_date` is the real guard against re-running Job 2 twice on the same day no matter which of the three trigger paths (in-process poller, external cron, manual) fires first; `job2_missed_alert_date` makes sure the "trading window missed" email only ever sends once per day, not once per retry. `last_run_duration_ms` and `last_run_stocks_scored` exist so the metrics page still shows real numbers after a restart wipes the in-memory tracker.
+`scheduler_state` is a single row that survives restarts. `job2_last_run_date` is the real guard against re-running Job 2 twice on the same day no matter which of the three trigger paths (in-process poller, external cron, manual) fires first; `job2_missed_alert_date` makes sure the "trading window missed" email only ever sends once per day, not once per retry. `job1_failed_alert_date` is the same once-per-day guard for the "scoring failed today" email. `last_run_duration_ms` and `last_run_stocks_scored` exist so the metrics page still shows real numbers after a restart wipes the in-memory tracker.
 
 ## API endpoints
 

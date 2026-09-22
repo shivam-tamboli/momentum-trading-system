@@ -124,6 +124,7 @@ job2_last_run_date       DATE                 -- the real guard against re-runni
 last_run_duration_ms     BIGINT
 last_run_stocks_scored   INT
 job2_missed_alert_date   DATE                 -- so the "trading window missed" email only ever sends once per day
+job1_failed_alert_date  DATE                 -- so the "scoring failed today" email only ever sends once per day
 ```
 Survives restarts on purpose — this state used to live only in memory, and a restart between Job 1 succeeding and Job 2 firing used to silently skip an entire trading day for every user.
 
@@ -142,7 +143,7 @@ The weights (0.5, 0.3, 0.2, 0.1) are constants in `DailyScoringService`. **Do no
 
 Before a stock is scored at all, it has to clear two checks: at least 3 months of price history (otherwise a newly listed stock's short window would get miscounted as a full 6-month return), and the run as a whole has to successfully score at least 90% of the ~1,500-stock universe, or the entire run is thrown out and the prior day's recommendations are left in place. There is no BUY/SELL/HOLD label stored anywhere — a stock is either in an index's top 5 for the day or it isn't. Ranking happens per index (`filter_name`), independently — a stock's rank in the S&P 500 has nothing to do with its rank in the full-market universe.
 
-**When it runs:** not on a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and fires Job 1 once, somewhere in the 3-hour window before market open. A hardcoded time (the original design used `0 0 9 * * MON`, once a week) breaks the moment a holiday shifts market open — this doesn't have that failure mode.
+**When it runs:** not on a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and retries Job 1 every 15 minutes within the 3-hour window before market open, until it succeeds — a single transient failure doesn't skip scoring for the entire day. A hardcoded time (the original design used `0 0 9 * * MON`, once a week) breaks the moment a holiday shifts market open — this doesn't have that failure mode.
 
 ---
 
@@ -174,7 +175,7 @@ Switching your tracked index (`POST /users/me/selected-index`) runs a variant of
 
 This runs automatically, once per trading day, before market open. No user triggers it.
 
-1. In-process poller fires Job 1 once market open is within 3 hours, based on Alpaca's real clock, not a hardcoded time.
+1. In-process poller attempts Job 1 once market open is within 3 hours, based on Alpaca's real clock, not a hardcoded time — and retries every 15 minutes within that window until it succeeds, gated on success rather than merely "did we already attempt today."
 2. Fetch 6 months of daily closing prices for every tracked symbol, using the **system** key, batched (200 symbols per request) and run in parallel — not one request per symbol.
 3. Per symbol: compute `ret_6m`, `ret_3m`, `ret_1m` from those prices, and `vol_3m` (standard deviation of daily returns over the last 3 months).
 4. Apply the formula in section 5.
@@ -182,6 +183,7 @@ This runs automatically, once per trading day, before market open. No user trigg
 6. If fewer than 90% of the universe scored successfully, throw out the entire run and keep yesterday's `daily_recommendation` rows in place — a partial or broken run never gets to publish a broken top 5.
 7. Otherwise: delete yesterday's rows and insert today's, in a single transaction (a crash between the delete and the insert must never leave the table empty).
 8. Send each user a "today's top 5" email for their tracked index.
+9. If the window closes (market opens) without Job 1 ever having succeeded that day, every eligible user gets a "Scoring Failed Today" email instead — once, not on every poll.
 
 ---
 

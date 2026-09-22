@@ -12,11 +12,11 @@ Two jobs, once a day, per user:
 1. **Scoring (Job 1)** — pulls 6 months of daily bars for every tracked stock and scores each one: `0.5×return_6m + 0.3×return_3m + 0.2×return_1m − 0.1×volatility_3m`. Needs at least 3 months of history to qualify, and the whole run gets thrown out if it scores less than 90% of the universe — a bad run doesn't get to quietly publish a broken top 5.
 2. **Trading (Job 2)** — for each user, diffs their current Alpaca holdings against today's top 5 for their chosen index, sells what dropped out, buys what's newly in. Only touches the delta, not a full liquidate-and-rebuy.
 
-Neither job is triggered by a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and fires Job 1 in the 3 hours before open, then retries Job 2 every 15 minutes for as long as the market's open, until it's confirmed done. This is deliberate — a hardcoded "9:30am" cron is exactly the kind of thing that quietly stops working the day Alpaca's clock and your assumption disagree.
+Neither job is triggered by a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and retries Job 1 every 15 minutes in the 3 hours before open until it succeeds, then retries Job 2 every 15 minutes for as long as the market's open, until it's confirmed done. This is deliberate — a hardcoded "9:30am" cron is exactly the kind of thing that quietly stops working the day Alpaca's clock and your assumption disagree, and a single failed attempt at either job shouldn't be able to silently skip the entire day.
 
 The catch: this all runs in-process, and the backend is on Render's free tier, which sleeps after ~15 minutes idle. A sleeping process can't poll anything. So there's a GitHub Actions workflow (`daily-trading-cron.yml`) that hits the admin endpoints directly at fixed UTC times as an external backup, plus a keep-alive workflow and an external uptime pinger to reduce how often the backend is actually asleep when it matters. GitHub Actions' own cron has been measured running 2–6 hours late on this repo, so it's a backup for the backup, not the primary mechanism — the in-process poller is what actually keeps the daily engine reliable.
 
-If the market closes and Job 2 never managed to run, every eligible user gets a "trading window missed" email instead of a silent no-op.
+If the market opens and Job 1 never managed to succeed, or the market closes and Job 2 never managed to run, every eligible user gets a "scoring failed" or "trading window missed" email — either way, a silent no-op is never the outcome.
 
 ## Security-relevant stuff worth knowing
 
@@ -29,7 +29,7 @@ If the market closes and Job 2 never managed to run, every eligible user gets a 
 
 Sent via Resend's HTTPS API, not SMTP — Render's free tier blocks outbound SMTP (port 587) entirely, which used to just hang forever with no error until the request eventually timed out. HTTPS on 443 doesn't have that problem. Every send is wrapped so a failed email can never take down the trading or scoring run it's reporting on; failures are tracked and visible on `/metrics` instead of buried in logs.
 
-Emails sent: today's top 5, portfolio rebalanced, index switch confirmed, no rebalancing needed, trading window missed, trade failed (this one's flagged as needing attention, not just informational), and an on-demand test email for checking deliverability.
+Emails sent: today's top 5, portfolio rebalanced, index switch confirmed, no rebalancing needed, scoring failed, trading window missed, trade failed (this one's flagged as needing attention, not just informational), and an on-demand test email for checking deliverability.
 
 ## Tech stack
 

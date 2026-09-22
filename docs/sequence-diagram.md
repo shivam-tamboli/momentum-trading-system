@@ -4,6 +4,8 @@ The three jobs that run automatically every trading day. Job 1 and Job 2 are tri
 
 ## 1. Job 1 — Daily Scoring
 
+Retries every 15 minutes within its 3-hour window until it succeeds — the same "keep trying, not one shot" design as Job 2. If the window closes without ever succeeding, every eligible user gets a "Scoring Failed Today" email, mirroring Job 2's "Trading Window Missed" alert.
+
 ```mermaid
 sequenceDiagram
     participant Scheduler
@@ -12,7 +14,7 @@ sequenceDiagram
     participant DB
     participant Email
 
-    Scheduler->>Service: market open within 3h, Job 1 not yet done today
+    Scheduler->>Service: market open within 3h, Job 1 not yet succeeded today
     Service->>Alpaca: fetch 6mo daily bars, batched 200 symbols/request, in parallel
     Alpaca-->>Service: closing prices
 

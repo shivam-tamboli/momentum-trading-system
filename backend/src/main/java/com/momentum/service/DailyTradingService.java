@@ -104,7 +104,7 @@ public class DailyTradingService {
 
         LocalDate tradingDay = clock.getTimestamp().toLocalDate();
         SchedulerState state = schedulerStateRepository.findById(SCHEDULER_STATE_ID)
-                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null, null));
+                .orElseGet(() -> new SchedulerState(SCHEDULER_STATE_ID, null, null, null, null, null, null, null));
 
         if (tradingDay.equals(state.getJob2LastRunDate())) {
             log.info("Daily trading: {} already completed — skipping", tradingDay);

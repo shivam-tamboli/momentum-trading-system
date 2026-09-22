@@ -50,4 +50,10 @@ public class SchedulerState {
     // are also its fields, job_2_last_run_date is DailyTradingService's own (see that class).
     @Column(name = "job2_missed_alert_date")
     private LocalDate job2MissedAlertDate;
+
+    // The date the "Job 1 never completed successfully today" alert was last sent — same
+    // once-per-day guard as job2MissedAlertDate, just for scoring instead of trading. Also owned
+    // by DailyEngineSchedulerService.
+    @Column(name = "job1_failed_alert_date")
+    private LocalDate job1FailedAlertDate;
 }

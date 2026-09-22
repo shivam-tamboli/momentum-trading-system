@@ -219,6 +219,18 @@ public class EmailService {
         send(EmailType.TRADING_WINDOW_MISSED, user.getEmail(), subject, body);
     }
 
+    // ---- Scoring failed: market opened today with Job 1 never having completed successfully ----
+
+    public void sendScoringFailedEmail(User user, LocalDateTime asOfUtc) {
+        String subject = "Scoring Failed Today | " + dateLabel(asOfUtc);
+
+        String body = "Today's momentum scoring didn't complete successfully before market open, so no new "
+                + "top 5 was published and your portfolio was not rebalanced today. Yesterday's recommendations "
+                + "are still in place. Scoring will run again automatically before tomorrow's open.\n";
+
+        send(EmailType.SCORING_FAILED, user.getEmail(), subject, body);
+    }
+
     // ---- Email 4: critical trade failure, sent immediately when a trade's status becomes FAILED ----
 
     public void sendTradeFailedEmail(User user, String symbol, ActionType action, LocalDateTime failedAtUtc) {

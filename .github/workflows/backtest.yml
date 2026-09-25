@@ -1,0 +1,31 @@
+name: Daily backtest
+
+# Runs after market close, once the day's final bars are available — well after Job 3
+# (reconcile-pending-trades, 21:00 UTC) so there's no resource contention with the live daily
+# engine. Weekdays only, same as the other scheduled workflows.
+on:
+  schedule:
+    - cron: "0 22 * * 1-5"
+  workflow_dispatch: {}
+
+jobs:
+  backtest:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Install dependencies
+        run: pip install -r scripts/requirements.txt
+
+      - name: Run backtest
+        env:
+          ALPACA_SYSTEM_API_KEY: ${{ secrets.ALPACA_SYSTEM_API_KEY }}
+          ALPACA_SYSTEM_API_SECRET: ${{ secrets.ALPACA_SYSTEM_API_SECRET }}
+          DB_URL: ${{ secrets.DB_URL }}
+          DB_USERNAME: ${{ secrets.DB_USERNAME }}
+          DB_PASSWORD: ${{ secrets.DB_PASSWORD }}
+        run: python3 scripts/backtest.py

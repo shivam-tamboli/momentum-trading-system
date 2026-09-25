@@ -174,7 +174,7 @@ erDiagram
 
 ## API endpoints
 
-Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/admin/**` (needs `X-Admin-Key` instead) and `/health` (needs nothing at all).
+Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/admin/**` (see Operational Controls below) and `/health` (needs nothing at all).
 
 | Method | Endpoint | What it does |
 |---|---|---|
@@ -198,14 +198,23 @@ Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/ad
 | GET | `/:userId/benchmark` | Portfolio return vs. tracked index return, same period |
 | GET | `/engine-status` | Whether today is a trading day and whether Job 1 / Job 2 have run |
 | GET | `/metrics` | Health, last scoring run, trade counts |
+
+Every `:userId` route checks that the caller's token actually belongs to that user. That wasn't always true — see below.
+
+`/metrics` is read-only and JWT-authenticated like everything else — it used to live under `/admin/`, but the frontend has no secure place to hold `X-Admin-Key` (anything shipped in client JS is readable by anyone via devtools), so that key stays reserved for the routes below that actually touch Alpaca orders or trigger a run.
+
+## Operational Controls
+
+Not part of the public API — these exist for running and debugging the daily engine by hand, gated by a separate `X-Admin-Key` header instead of a user's Supabase JWT, since there's no user behind these calls at all (a person with repo/deploy access, or `daily-trading-cron.yml`, calling them directly).
+
+| Method | Endpoint | What it does |
+|---|---|---|
 | POST | `/admin/run-daily-scoring` | Manually trigger Job 1 |
 | POST | `/admin/run-daily-trading` | Manually trigger Job 2 |
 | POST | `/admin/reconcile-pending-trades` | Manually trigger Job 3 |
 | POST | `/admin/test-email` | On-demand send to confirm Resend is actually delivering |
 
-Every `:userId` route checks that the caller's token actually belongs to that user. That wasn't always true — see below.
-
-`/metrics` is read-only and JWT-authenticated like everything else — it used to live under `/admin/`, but the frontend has no secure place to hold `X-Admin-Key` (anything shipped in client JS is readable by anyone via devtools), so that key stays reserved for the three routes that actually touch Alpaca orders.
+None of these are needed for the system to run correctly day to day — Job 1/2/3 all fire on their own schedule regardless (see "Daily trading engine flow" above). These are for exactly two situations: `daily-trading-cron.yml` calling them as an external backup trigger (see "Keeping the server awake" below), and manually forcing a run or checking email deliverability while debugging something live.
 
 ## Frontend
 

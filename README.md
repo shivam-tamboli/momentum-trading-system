@@ -7,14 +7,15 @@ I built a system that trades stocks on its own, every day, based on price moment
 
 ## How it actually runs
 
-Two jobs, once a day, per user:
+Three jobs, every trading day:
 
 1. **Scoring (Job 1)** — pulls 6 months of daily bars for every tracked stock and scores each one: `0.5×return_6m + 0.3×return_3m + 0.2×return_1m − 0.1×volatility_3m`. Needs at least 3 months of history to qualify, and the whole run gets thrown out if it scores less than 90% of the universe — a bad run doesn't get to quietly publish a broken top 5.
 2. **Trading (Job 2)** — for each user, diffs their current Alpaca holdings against today's top 5 for their chosen index, sells what dropped out, buys what's newly in. Only touches the delta, not a full liquidate-and-rebuy.
+3. **Reconciliation (Job 3)** — runs automatically at 21:00 UTC, well after close. An order can outlive the code watching it — Job 2 only waits ~24 seconds per order before moving on — so this checks Alpaca's own record for anything still marked PENDING and moves it to FILLED or FAILED.
 
-Neither job is triggered by a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and retries Job 1 every 15 minutes in the 3 hours before open until it succeeds, then retries Job 2 every 15 minutes for as long as the market's open, until it's confirmed done. This is deliberate — a hardcoded "9:30am" cron is exactly the kind of thing that quietly stops working the day Alpaca's clock and your assumption disagree, and a single failed attempt at either job shouldn't be able to silently skip the entire day.
+Job 1 and Job 2 aren't triggered by a fixed cron time. `DailyEngineSchedulerService` polls Alpaca's own market clock every 60 seconds and retries Job 1 every 15 minutes in the 3 hours before open until it succeeds, then retries Job 2 every 15 minutes for as long as the market's open, until it's confirmed done. This is deliberate — a hardcoded "9:30am" cron is exactly the kind of thing that quietly stops working the day Alpaca's clock and your assumption disagree, and a single failed attempt at either job shouldn't be able to silently skip the entire day. Job 3 doesn't need any of that — it just has to run sometime after close, so a plain fixed-time cron is enough.
 
-The catch: this all runs in-process, and the backend is on Render's free tier, which sleeps after ~15 minutes idle. A sleeping process can't poll anything. So there's a GitHub Actions workflow (`daily-trading-cron.yml`) that hits the admin endpoints directly at fixed UTC times as an external backup, plus a keep-alive workflow and an external uptime pinger to reduce how often the backend is actually asleep when it matters. GitHub Actions' own cron has been measured running 2–6 hours late on this repo, so it's a backup for the backup, not the primary mechanism — the in-process poller is what actually keeps the daily engine reliable.
+The catch: the clock-polling part of this runs in-process, and the backend is on Render's free tier, which sleeps after ~15 minutes idle. A sleeping process can't poll anything. So there's a GitHub Actions workflow (`daily-trading-cron.yml`) that triggers all three jobs directly at fixed UTC times as an external backup, plus a keep-alive workflow and an external uptime pinger to reduce how often the backend is actually asleep when it matters. GitHub Actions' own cron has been measured running 2–6 hours late on this repo, so it's a backup for the backup, not the primary mechanism — the in-process poller is what actually keeps Job 1 and Job 2 reliable.
 
 If the market opens and Job 1 never managed to succeed, or the market closes and Job 2 never managed to run, every eligible user gets a "scoring failed" or "trading window missed" email — either way, a silent no-op is never the outcome.
 
@@ -23,7 +24,6 @@ If the market opens and Job 1 never managed to succeed, or the market closes and
 - **Alpaca API keys are encrypted at rest** — AES-256-GCM, keyed by `ENCRYPTION_KEY`. Values are stored with an `enc:v1:` prefix so a future format change can migrate safely without a big-bang rewrite.
 - **Auth is Supabase JWT, verified once per request** — `JwtAuthFilter` checks the token against Supabase and puts the resolved email on `SecurityContextHolder`; every controller reads that instead of re-verifying the token itself.
 - **CORS is scoped to this project's own Vercel deployments**, not a single hardcoded URL — `https://momentum-trading-system-*.vercel.app`, so PR preview deployments actually work against the real backend instead of failing CORS silently.
-- **Admin endpoints** (`/admin/*` — manual scoring/trading triggers, reconciliation, test email) are gated by a separate `X-Admin-Key` header, not JWT. Everything else needs a real logged-in user.
 
 ## Email
 

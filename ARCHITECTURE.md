@@ -17,9 +17,12 @@ flowchart TB
     GHA[GitHub Actions, daily] -->|fetch + validate| Sources[SSGA ETF holdings, SlickCharts]
     GHA -->|opens a PR if changed| Repo[4 ticker files in this repo]
     Repo -->|bundled at build time| BE
+
+    GHBT[GitHub Actions, daily<br/>scripts/backtest.py] -->|historical bars| Alpaca
+    GHBT -->|writes backtest_result| DB
 ```
 
-The frontend never talks to Alpaca, Postgres, or Resend directly. Everything goes through the backend, which checks the caller's Supabase token on every request. Index constituent data doesn't come from a live API call at request time at all — it's four text files built into the backend, kept current by a separate scheduled job. More on why below. Email is a one-way, fire-and-forget HTTPS call — the backend never waits on a delivery confirmation to decide whether a trading run succeeded, and a failed send is logged and tracked, never allowed to fail the run it's reporting on.
+The frontend never talks to Alpaca, Postgres, or Resend directly. Everything goes through the backend, which checks the caller's Supabase token on every request. Index constituent data doesn't come from a live API call at request time at all — it's four text files built into the backend, kept current by a separate scheduled job. More on why below. Email is a one-way, fire-and-forget HTTPS call — the backend never waits on a delivery confirmation to decide whether a trading run succeeded, and a failed send is logged and tracked, never allowed to fail the run it's reporting on. The backtest job is the one exception to "the backend is the only thing that touches Postgres" — it's a separate Python process that reads Alpaca and writes straight to the database; the backend only ever reads what it stored (see Backtest below).
 
 ## Daily trading engine flow
 
@@ -95,6 +98,18 @@ I picked these two and recomputed the formula by hand against the raw Alpaca bar
 
 Before scoring, a stock has to clear two checks: at least 3 months of price history (a newly listed stock with two weeks of data would get its short window treated as a full 6-month return otherwise), and the run itself has to score at least 90% of the ~1,500-stock universe or the whole run gets thrown out. A real run this week scored 1,515 of 1,520 tracked stocks — comfortably clear of that floor.
 
+## Backtest
+
+A separate daily job, entirely outside the Spring Boot app: `scripts/backtest.py`, run by `.github/workflows/backtest.yml`. It walks forward across the last 2 years, applying the exact formula above to every historical trading day instead of just today, ranking each index's constituents and simulating an equal-weighted portfolio that rebalances to that day's top 5 every day — compared against the relevant benchmark ETF compounding its own real daily returns over the same range.
+
+First run per index backfills 2 years; every run after picks up from that index's own last stored day and last stored value, fetching only the trailing lookback window the formula needs plus whatever's new — never refetching or recomputing the full range again. Computed with pandas, vectorized across every (day, symbol) pair at once rather than a line-by-line port of the Java loop — at this scale (~1,500 stocks × ~500 trading days × 5 indexes) a naive per-day recomputation would be too slow to run as a daily job. Validated against a naive per-date reimplementation of the same formula for exact numeric parity on real data before being finalized.
+
+Only a normalized cumulative-return index is ever computed or stored — both series start at 100, never a dollar amount for any specific investment. `GET /backtest/{index}` (JWT-authenticated, same as `/recommendations`) serves the stored series as-is; the Backtest page turns it into real dollar figures entirely client-side, scaled by whatever starting amount the user enters.
+
+Benchmark ETFs: `SPY` (S&P 500), `MDY` (S&P 400), `SLY` (S&P 600), `QQQ` (Nasdaq 100), `VTI` (Full Market) — its own mapping, separate from the one the live Dashboard benchmark-comparison card uses (`IndexConstituentService.INDEX_TO_ETF`), which has no `FULL_MARKET` entry and uses `SPSM` for S&P 600. Two different real S&P 600 ETFs now show up in different parts of the app as a result.
+
+Needs its own repository secrets to run — `ALPACA_SYSTEM_API_KEY`, `ALPACA_SYSTEM_API_SECRET`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` — same values already set as Render environment variables, added separately the same way as `ADMIN_SECRET_KEY` (see "Keeping the server awake" below).
+
 ## Database schema
 
 ```mermaid
@@ -164,9 +179,20 @@ erDiagram
         date job2_missed_alert_date
         date job1_failed_alert_date
     }
+    backtest_result {
+        bigint id PK
+        string index_name
+        date result_date
+        decimal portfolio_value
+        decimal benchmark_value
+        string top5_symbols
+        timestamp created_at
+    }
 ```
 
 `daily_trade`, `index_switch_history`, and `daily_engine_log` all link to `users` — every trade, index switch, and daily log entry belongs to someone, and `index_switch_history` records the amount actually in effect at switch time, not whatever it's since changed to. `daily_recommendation` is global: it's today's top 5 for each index, the same for every user, wiped and rewritten each morning. The four `ret_*`/`vol_3m` columns are the momentum formula's own inputs, stored alongside the score so the recommendations table can show the breakdown, not just the final number.
+
+`backtest_result` is also global, like `daily_recommendation` — no user link, one row per `(index_name, result_date)`, written only by `scripts/backtest.py` (see Backtest above), never by the Spring Boot app itself.
 
 `daily_engine_log` is one row per user per trading day (unique on `user_id` + `log_date`), written by both Job 1 and Job 2 regardless of outcome — a plain "no rebalance needed" day gets a row just like a day with real trades, and so does a failure. `rebalance_summary` is a one-line plain-English description ("Bought SNDK, MU. Sold INTC, PANW.") kept alongside the machine-readable status. This table is also what Trade History uses to fill in a day that ran but placed zero trades — market closed, holdings already matched, or a genuine failure — instead of that day just showing up blank, indistinguishable from a day nothing ever ran at all.
 
@@ -189,6 +215,11 @@ Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/ad
 | GET | `/recommendations/sp600` | Today's top 5, S&P 600 |
 | GET | `/recommendations/nasdaq100` | Today's top 5, Nasdaq 100 |
 | GET | `/recommendations/full-market` | Today's top 5 across the whole scored universe |
+| GET | `/backtest/snp500` | 2-year walk-forward simulation vs. benchmark, S&P 500 |
+| GET | `/backtest/sp400` | 2-year walk-forward simulation vs. benchmark, S&P 400 |
+| GET | `/backtest/sp600` | 2-year walk-forward simulation vs. benchmark, S&P 600 |
+| GET | `/backtest/nasdaq100` | 2-year walk-forward simulation vs. benchmark, Nasdaq 100 |
+| GET | `/backtest/full-market` | 2-year walk-forward simulation vs. benchmark, Full Market |
 | GET | `/index-price-history` | 30-day price history for an index's tracking ETF |
 | GET | `/stock-price-history` | 14-day price history for a list of symbols (sparklines) |
 | GET | `/:userId/account` | Live cash, buying power, portfolio value |
@@ -218,9 +249,11 @@ None of these are needed for the system to run correctly day to day — Job 1/2/
 
 ## Frontend
 
-Five pages behind login: Dashboard, Positions, Recommendations, Settings, System Metrics. Every timestamp anywhere in the app shows both IST and ET side by side — "4:01 PM IST (6:31 AM ET)" — since backend timestamps are UTC and the person who built this and the market this trades in are in different timezones from each other. Light and dark themes are both fully defined, not a dark-only app with a toggle bolted on; the switch lives in the sidebar and persists across sessions.
+Six pages behind login: Dashboard, Positions, Recommendations, Backtest, Settings, System Metrics. Every timestamp anywhere in the app shows both IST and ET side by side — "4:01 PM IST (6:31 AM ET)" — since backend timestamps are UTC and the person who built this and the market this trades in are in different timezones from each other. Light and dark themes are both fully defined, not a dark-only app with a toggle bolted on; the switch lives in the sidebar and persists across sessions.
 
 **Dashboard.** Portfolio value with today's change, a benchmark comparison (your return vs. the tracked index's return over the same period, pulled from Alpaca's own portfolio history endpoint so it's not something computed by hand from the trade log), a donut chart of what you're holding, live positions, algorithm status, the tracked index's 30-day price, today's top 5 with a sparkline per stock, and trade history — grouped by day, 20 most recent with a load-more button, not truncated to a fixed number with no way to see older trades.
+
+**Backtest.** Same index tabs as Recommendations. A dual-line chart (momentum strategy vs. benchmark ETF), three stats (total return, benchmark return, out/underperformance), and a plain number input for a starting amount — every dollar figure on the page is computed from the stored percentage curve the moment that number changes, entirely client-side. An (i) icon next to every stat and the chart title explains what it means in plain language.
 
 **Settings.** Connect an Alpaca key, set an investment amount, pick an index. Switching index sells everything currently held and buys the new index's top 5, with a confirmation dialog first since it's a real action with consequences. A Switch History table below the picker shows every past switch — previous index, new index, the dollar amount that was actually in effect at that moment, and when.
 
@@ -243,6 +276,8 @@ Five pages behind login: Dashboard, Positions, Recommendations, Settings, System
 **Three overlapping ways to trigger the daily engine, on purpose.** The in-process scheduler alone isn't enough — it can only run while the process is awake, and a free-tier backend doesn't stay awake on its own. Rather than trust one keep-alive mechanism to solve that, `daily-trading-cron.yml` triggers the actual jobs directly and wakes the backend itself in the process, independent of whether anything else kept it warm. This only works safely because rebalancing is idempotent by design (see the scheduling diagram above) — redundant triggers can't cause redundant trades.
 
 **A restrained accent color instead of the default theme.** The frontend shipped on shadcn's unmodified grayscale palette for most of this project — functional, but indistinguishable from any other prototype. I picked one deliberate accent (a blue, `oklch(0.623 0.214 259.815)`) for interactive elements, and reserved green/red/amber exclusively for gain/loss/pending states so the two color systems can't collide. Both a light and a dark palette are defined this way, switchable from the sidebar, not just a dark-mode-only app with the toggle removed.
+
+**pandas for the backtest, not a line-by-line port of the Java scoring loop.** The backtest walks the same formula across ~1,500 stocks × ~500 trading days × 5 indexes — recomputing that from scratch per day, the way the live scoring job does for a single day, would be too slow to run daily. Pivoting into a date × symbol price matrix and computing every day's scores at once with vectorized pandas operations instead cut that down to something that actually finishes in a GitHub Actions job. Checked for exact numeric parity against a naive per-date reimplementation of the same formula before trusting the vectorized version.
 
 **lightweight-charts for every chart, nothing else.** TradingView's open-source charting library renders the index price chart, the per-stock sparklines in the recommendations table, and nothing beyond that — no general-purpose charting library pulled in for one-off use cases. The portfolio composition breakdown is a donut, which this library doesn't do, so that one's plain SVG using the same theme tokens instead of a second charting dependency for a single chart type.
 
@@ -329,4 +364,4 @@ No separate build server — Vercel and Render both watch the GitHub repo direct
 
 `.github/workflows/ci.yml` runs two jobs in parallel on every pull request and every push to `main`: `build-backend` (Java 21, `mvn clean package -DskipTests`) and `build-frontend` (Node 20, `npm ci && npm run build`). Both are required status checks on `main` — a PR can't merge if either fails. This confirms the code builds, not that it behaves correctly — there's still no automated test suite, so behavior gets verified manually: hitting the real deployed endpoints with a real JWT after merge to confirm a change actually works, not just that it compiles.
 
-The three scheduled GitHub Actions workflows (`daily-trading-cron.yml`, `keep-alive.yml`, `update-index-constituents.yml`) are the closest thing to a third CI system here — cron-triggered jobs that call the live backend or open a PR against this repo, not build/test automation.
+The four scheduled GitHub Actions workflows (`daily-trading-cron.yml`, `keep-alive.yml`, `update-index-constituents.yml`, `backtest.yml`) are the closest thing to a third CI system here — cron-triggered jobs that call the live backend, open a PR against this repo, or (backtest.yml) write straight to the database, not build/test automation.

@@ -31,6 +31,12 @@ Sent via Resend's HTTPS API, not SMTP — Render's free tier blocks outbound SMT
 
 Emails sent: today's top 5, portfolio rebalanced, index switch confirmed, no rebalancing needed, scoring failed, trading window missed, trade failed (this one's flagged as needing attention, not just informational), and an on-demand test email for checking deliverability.
 
+## Backtest
+
+A separate daily job (`scripts/backtest.py` + a GitHub Actions workflow, not the Spring Boot app) walks forward across the last 2 years scoring every stock with the exact same formula as live scoring, and simulates a portfolio that rebalances to each day's top 5 — compared against that index's benchmark ETF over the same period. First run backfills 2 years; every run after just continues from wherever it left off, never refetching or recomputing what's already stored.
+
+Only a percentage growth curve is ever computed or stored — no dollar amount. The Backtest page lets you enter any starting amount and turns that curve into real dollar figures instantly, entirely in the browser.
+
 ## Tech stack
 
 - **Backend** — Java 21, Spring Boot 3.3.4
@@ -42,6 +48,7 @@ Emails sent: today's top 5, portfolio rebalanced, index switch confirmed, no reb
 - **Charts** — lightweight-charts (TradingView)
 - **Data fetching** — TanStack React Query
 - **Index data pipeline** — Python script + GitHub Actions
+- **Backtest pipeline** — Python (pandas) + GitHub Actions, writes straight to Postgres
 - **Hosting** — Render (backend), Vercel (frontend)
 
 ## Quick start

@@ -159,3 +159,20 @@ export interface EngineStatus {
   job1_last_success_date: string | null;
   job2_last_run_date: string | null;
 }
+
+// From GET /backtest/{index} — a normalized cumulative-return index for both series, both
+// starting at 100 on the earliest backfilled day. Never a dollar amount: the frontend scales
+// these by whatever starting amount the user enters, client-side, on every point at once.
+export interface BacktestPoint {
+  date: string;
+  portfolio_value: number;
+  benchmark_value: number;
+  // Comma-separated, e.g. "AMD,CRWD,PANW,MRVL,FTNT" — that day's simulated top 5.
+  top5_symbols: string;
+}
+
+export interface BacktestResponse {
+  index_name: string;
+  etf_symbol: string;
+  points: BacktestPoint[];
+}

@@ -10,6 +10,7 @@ import {
   LogOut,
   Activity,
   Briefcase,
+  History,
   Settings,
   Sun,
   Moon,
@@ -24,6 +25,7 @@ const NAV_ITEMS = [
   { href: '/dashboard', label: 'Dashboard', icon: LayoutDashboard },
   { href: '/positions', label: 'Positions', icon: Briefcase },
   { href: '/recommendations', label: 'Recommendations', icon: LineChart },
+  { href: '/backtest', label: 'Backtest', icon: History },
   { href: '/settings', label: 'Settings', icon: Settings },
   { href: '/admin', label: 'System Metrics', icon: Activity },
 ];

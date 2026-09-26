@@ -106,7 +106,7 @@ First run per index backfills 2 years; every run after picks up from that index'
 
 Only a normalized cumulative-return index is ever computed or stored — both series start at 100, never a dollar amount for any specific investment. `GET /backtest/{index}` (JWT-authenticated, same as `/recommendations`) serves the stored series as-is; the Backtest page turns it into real dollar figures entirely client-side, scaled by whatever starting amount the user enters.
 
-Benchmark ETFs: `SPY` (S&P 500), `MDY` (S&P 400), `SLY` (S&P 600), `QQQ` (Nasdaq 100), `VTI` (Full Market) — its own mapping, separate from the one the live Dashboard benchmark-comparison card uses (`IndexConstituentService.INDEX_TO_ETF`), which has no `FULL_MARKET` entry and uses `SPSM` for S&P 600. Two different real S&P 600 ETFs now show up in different parts of the app as a result.
+Benchmark ETFs: `SPY` (S&P 500), `MDY` (S&P 400), `SPSM` (S&P 600), `QQQ` (Nasdaq 100), `VTI` (Full Market) — its own mapping, separate from the one the live Dashboard benchmark-comparison card uses (`IndexConstituentService.INDEX_TO_ETF`), which has no `FULL_MARKET` entry but agrees on `SPSM` for S&P 600.
 
 Needs its own repository secrets to run — `ALPACA_SYSTEM_API_KEY`, `ALPACA_SYSTEM_API_SECRET`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` — same values already set as Render environment variables, added separately the same way as `ADMIN_SECRET_KEY` (see "Keeping the server awake" below).
 

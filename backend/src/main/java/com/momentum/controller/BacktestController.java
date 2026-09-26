@@ -25,14 +25,12 @@ import java.util.stream.Collectors;
 public class BacktestController {
 
     // Deliberately its own map, separate from IndexConstituentService.INDEX_TO_ETF (which has no
-    // FULL_MARKET entry and uses SPSM for S&P 600, the ETF the live benchmark-comparison feature
-    // already shows). This backtest feature covers all 5 tracked options, including Full Market,
-    // and uses SLY for S&P 600 specifically for this feature — a different real S&P 600 ETF than
-    // the one already shown elsewhere in the app.
+    // FULL_MARKET entry). This backtest feature covers all 5 tracked options, including Full
+    // Market; S&P 600 uses SPSM, same ETF as the live benchmark-comparison feature elsewhere.
     private static final Map<String, String> BACKTEST_ETF = Map.of(
             IndexConstituentService.SP500, "SPY",
             IndexConstituentService.SP400, "MDY",
-            IndexConstituentService.SP600, "SLY",
+            IndexConstituentService.SP600, "SPSM",
             IndexConstituentService.NASDAQ100, "QQQ",
             DailyScoringService.FULL_MARKET, "VTI"
     );

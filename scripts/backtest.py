@@ -45,13 +45,12 @@ FULL_MARKET = "FULL_MARKET"
 ALL_INDEXES = [*FILTER_FILES.keys(), FULL_MARKET]
 
 # Deliberately its own map, separate from IndexConstituentService.INDEX_TO_ETF (which has no
-# FULL_MARKET entry and uses SPSM for S&P 600, the ETF the live benchmark-comparison feature
-# already shows elsewhere in the app). This feature covers all 5 tracked options and uses SLY for
-# S&P 600 specifically — a different real S&P 600 ETF than the one shown there.
+# FULL_MARKET entry). This feature covers all 5 tracked options; S&P 600 uses SPSM, same ETF as
+# the live benchmark-comparison feature elsewhere in the app.
 BENCHMARK_ETF = {
     "S&P 500": "SPY",
     "S&P 400": "MDY",
-    "S&P 600": "SLY",
+    "S&P 600": "SPSM",
     "NASDAQ 100": "QQQ",
     FULL_MARKET: "VTI",
 }

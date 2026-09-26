@@ -15,7 +15,7 @@ interface SparklineProps {
 // live CSS bundle, not computed by hand (canvas can't parse oklch()).
 const PALETTES = {
   light: { gain: '#00a544', loss: '#e40014' },
-  dark: { gain: '#00c565', loss: '#ff6568' },
+  dark: { gain: '#39c34b', loss: '#ff6568' },
 } as const;
 
 export function Sparkline({ points, width = 72, height = 24 }: SparklineProps) {

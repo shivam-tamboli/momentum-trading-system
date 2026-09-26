@@ -54,7 +54,11 @@ export function AppSidebarContent() {
   };
 
   return (
-    <div className="flex h-full flex-col">
+    // bg-sidebar: the --sidebar token existed in globals.css but nothing actually rendered it —
+    // the sidebar previously just showed through to the page's own --background. Set here, once,
+    // so both the desktop <aside> and the mobile Sheet variant (which renders this same content
+    // inside a bg-popover SheetContent) get the same distinct sidebar surface.
+    <div className="flex h-full flex-col bg-sidebar">
       <div className="flex items-center justify-between gap-2.5 px-4 py-5">
         <div className="flex items-center gap-2.5">
           <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md bg-primary font-mono text-sm font-bold text-primary-foreground">
@@ -91,10 +95,12 @@ export function AppSidebarContent() {
               key={item.href}
               href={item.href}
               className={cn(
-                'flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors',
+                // border-l-[3px] is always reserved, transparent when inactive, so the active
+                // state doesn't shift every item's content 3px right when it switches on.
+                'flex items-center gap-3 rounded-md border-l-[3px] px-3 py-2 text-sm font-medium transition-colors',
                 isActive
-                  ? 'bg-primary text-primary-foreground'
-                  : 'text-muted-foreground hover:bg-accent hover:text-accent-foreground'
+                  ? 'border-primary text-primary'
+                  : 'border-transparent text-muted-foreground hover:bg-accent hover:text-accent-foreground'
               )}
             >
               <Icon className="h-4 w-4" />

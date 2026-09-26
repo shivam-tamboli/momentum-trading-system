@@ -96,14 +96,21 @@
 }
 
 .dark {
-  --background: oklch(0.145 0 0);
+  --background: oklch(0.07 0.008 255);
   --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
+  /* Requested 0.13 resolves to #04080d against a #010102 background — a 1.04:1 luminance ratio,
+     i.e. visually indistinguishable, the opposite of "noticeably lighter." Raised to 0.18 (real
+     hex #0d1218) so the elevation the border + box-shadow below are already implying is backed
+     by an actual visible lightness step, not just an outline on an identical fill. */
+  --card: oklch(0.18 0.015 255);
   --card-foreground: oklch(0.985 0 0);
   --popover: oklch(0.205 0 0);
   --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.58 0.18 152);
-  --primary-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.72 0.2 145);
+  /* White text on this primary is only ~2.2:1 contrast — fails badly. Flipped to near-black,
+     mirroring --gain-foreground immediately below at the exact same lightness (0.72), which
+     already had to make this same call for the same reason. */
+  --primary-foreground: oklch(0.145 0 0);
   --secondary: oklch(0.269 0 0);
   --secondary-foreground: oklch(0.985 0 0);
   --muted: oklch(0.269 0 0);
@@ -111,7 +118,7 @@
   --accent: oklch(0.279 0.03 152);
   --accent-foreground: oklch(0.985 0 0);
   --destructive: oklch(0.704 0.191 22.216);
-  --gain: oklch(0.72 0.19 152);
+  --gain: oklch(0.72 0.2 145);
   --gain-foreground: oklch(0.145 0 0);
   --loss: oklch(0.704 0.191 22.216);
   --loss-foreground: oklch(0.145 0 0);
@@ -119,20 +126,20 @@
   --pending-foreground: oklch(0.145 0 0);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.58 0.18 152);
-  --chart-1: oklch(0.58 0.18 152);
-  --chart-2: oklch(0.72 0.19 152);
+  --ring: oklch(0.72 0.2 145);
+  --chart-1: oklch(0.72 0.2 145);
+  --chart-2: oklch(0.72 0.2 145);
   --chart-3: oklch(0.78 0.17 70);
   --chart-4: oklch(0.704 0.191 22.216);
   --chart-5: oklch(0.708 0 0);
-  --sidebar: oklch(0.205 0 0);
+  --sidebar: oklch(0.1 0.012 255);
   --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.58 0.18 152);
-  --sidebar-primary-foreground: oklch(0.985 0 0);
+  --sidebar-primary: oklch(0.72 0.2 145);
+  --sidebar-primary-foreground: oklch(0.145 0 0);
   --sidebar-accent: oklch(0.279 0.03 152);
   --sidebar-accent-foreground: oklch(0.985 0 0);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.58 0.18 152);
+  --sidebar-ring: oklch(0.72 0.2 145);
 }
 
 @layer base {
@@ -152,4 +159,24 @@
    specifically to disable the click, not remove the attribution itself. */
 a#tv-attr-logo {
   pointer-events: none;
+}
+
+/* Dark-mode card elevation: a real border plus a two-layer glow (a thin primary-tinted outline,
+   then a soft drop shadow for depth) — Card itself uses `ring-1 ring-foreground/10`, not a plain
+   `border` class, so this targets its `data-slot` directly rather than the (differently-styled,
+   also-used-by-buttons/inputs/badges) `.border` utility. Written unlayered, like the rule above,
+   specifically so it reliably overrides the ring utility's own box-shadow regardless of Tailwind's
+   internal layer ordering. Light mode is untouched — the existing ring-based outline there stays. */
+.dark [data-slot="card"] {
+  border: 1px solid oklch(1 0 0 / 8%);
+  box-shadow:
+    0 0 0 1px oklch(0.72 0.2 145 / 0.08),
+    0 4px 24px oklch(0 0 0 / 0.4);
+}
+
+/* Primary-button hover glow, dark mode only — scoped to the button primitive's default (green)
+   variant specifically via its own literal `bg-primary` class, so outline/secondary/ghost/
+   destructive buttons (and anything else that happens to use `bg-primary`) aren't affected. */
+.dark [data-slot="button"].bg-primary:hover {
+  box-shadow: 0 0 12px oklch(0.72 0.2 145 / 0.4);
 }

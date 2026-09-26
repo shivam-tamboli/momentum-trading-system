@@ -47,13 +47,13 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
     <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
       <Card className="sm:col-span-2">
         <CardContent>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Portfolio Value
           </p>
           {isLoading || account?.portfolio_value === undefined ? (
             <Skeleton className="mt-2 h-10 w-40" />
           ) : (
-            <p className="mt-2 font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+            <p className="mt-2 font-mono text-5xl font-bold tracking-tight tabular-nums">
               {currency.format(animatedPortfolioValue ?? account.portfolio_value)}
             </p>
           )}
@@ -62,11 +62,11 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
 
       <Card>
         <CardContent>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cash</p>
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">Cash</p>
           {isLoading || account?.cash === undefined ? (
             <Skeleton className="mt-2 h-8 w-20" />
           ) : (
-            <p className="mt-2 font-mono text-2xl font-bold tabular-nums">
+            <p className="mt-2 font-mono text-3xl font-semibold tabular-nums">
               {currency.format(account.cash)}
             </p>
           )}
@@ -75,7 +75,7 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
 
       <Card>
         <CardContent>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Today&apos;s P&amp;L
           </p>
           {isLoading ? (
@@ -84,7 +84,7 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
             <>
               <p
                 className={cn(
-                  'mt-2 font-mono text-2xl font-bold tabular-nums',
+                  'mt-2 font-mono text-3xl font-semibold tabular-nums',
                   isPositiveDelta ? 'text-gain' : 'text-loss'
                 )}
               >
@@ -102,20 +102,20 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
               </p>
             </>
           ) : (
-            <p className="mt-2 font-mono text-2xl font-bold text-muted-foreground">—</p>
+            <p className="mt-2 font-mono text-3xl font-semibold text-muted-foreground">—</p>
           )}
         </CardContent>
       </Card>
 
       <Card>
         <CardContent>
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+          <p className="text-xs font-medium tracking-widest text-muted-foreground uppercase">
             Buying Power
           </p>
           {isLoading || account?.buying_power === undefined ? (
             <Skeleton className="mt-2 h-8 w-20" />
           ) : (
-            <p className="mt-2 font-mono text-2xl font-bold tabular-nums">
+            <p className="mt-2 font-mono text-3xl font-semibold tabular-nums">
               {currency.format(account.buying_power)}
             </p>
           )}

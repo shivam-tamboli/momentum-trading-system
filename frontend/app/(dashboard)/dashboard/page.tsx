@@ -15,6 +15,7 @@ import { PositionsTable } from '@/components/PositionsTable';
 import { TradeHistoryTable } from '@/components/TradeHistoryTable';
 import { Button } from '@/components/ui/button';
 import { Card, CardHeader, CardTitle, CardDescription, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { getScoringState } from '@/lib/engine-status';
 import type {
   AccountResponse,
@@ -183,6 +184,8 @@ export default function DashboardPage() {
         </CardContent>
       </Card>
 
+      <Separator className="opacity-60" />
+
       <Card>
         <CardHeader>
           <CardTitle>Your Positions</CardTitle>
@@ -245,6 +248,8 @@ export default function DashboardPage() {
           )}
         </CardContent>
       </Card>
+
+      <Separator className="opacity-60" />
 
       <Card>
         <CardHeader>

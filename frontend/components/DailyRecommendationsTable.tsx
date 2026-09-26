@@ -123,7 +123,8 @@ export function DailyRecommendationsTable({
 
           {!isLoading &&
             !isError &&
-            recommendations?.map((rec) => {
+            recommendations?.map((rec, index) => {
+              const rank = index + 1;
               const isPositive = rec.momentum_score >= 0;
               // Explicit typeof checks, not just "!== null" — a field that's missing from the
               // response entirely comes through as undefined, not null, and undefined !== null
@@ -152,14 +153,16 @@ export function DailyRecommendationsTable({
                           span being centered independently within its own (possibly different)
                           natural height. */}
                       <span className="flex h-6 items-center gap-2 leading-none">
-                        {hasBreakdown && (
-                          <ChevronDown
-                            className={cn(
-                              'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
-                              isExpanded && 'rotate-180'
-                            )}
-                          />
-                        )}
+                        {/* Always takes up the slot, even when not expandable — a per-row
+                            conditional mount here would shift the symbol left/right depending on
+                            whether that particular row has a breakdown, misaligning the column. */}
+                        <ChevronDown
+                          className={cn(
+                            'h-3.5 w-3.5 shrink-0 text-muted-foreground transition-transform',
+                            hasBreakdown ? 'opacity-100' : 'opacity-0',
+                            isExpanded && 'rotate-180'
+                          )}
+                        />
                         {rec.symbol}
                         {heldSymbols?.has(rec.symbol) && (
                           <Badge variant="outline" className="gap-1 border-gain/30 bg-gain/10 text-gain">
@@ -174,6 +177,9 @@ export function DailyRecommendationsTable({
                     </TableCell>
                     <TableCell>
                       <span className="flex h-6 items-center gap-3 leading-none">
+                        <span className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground tabular-nums">
+                          {rank}
+                        </span>
                         <span
                           className={cn(
                             'font-mono text-sm font-semibold tabular-nums',

@@ -100,7 +100,7 @@ Before scoring, a stock has to clear two checks: at least 3 months of price hist
 
 ## Backtest
 
-A separate daily job, entirely outside the Spring Boot app: `scripts/backtest.py`, run by `.github/workflows/backtest.yml`. It walks forward across the last 2 years, applying the exact formula above to every historical trading day instead of just today, ranking each index's constituents and simulating an equal-weighted portfolio that rebalances to that day's top 5 every day — compared against the relevant benchmark ETF compounding its own real daily returns over the same range.
+A separate daily job, entirely outside the Spring Boot app: `scripts/backtest.py`, run by `.github/workflows/backtest.yml` at 22:00 UTC on weekdays — well after Job 3 (21:00 UTC), so there's no resource contention with the live daily engine. It walks forward across the last 2 years, applying the exact formula above to every historical trading day instead of just today, ranking each index's constituents and simulating an equal-weighted portfolio that rebalances to that day's top 5 every day — compared against the relevant benchmark ETF compounding its own real daily returns over the same range.
 
 First run per index backfills 2 years; every run after picks up from that index's own last stored day and last stored value, fetching only the trailing lookback window the formula needs plus whatever's new — never refetching or recomputing the full range again. Computed with pandas, vectorized across every (day, symbol) pair at once rather than a line-by-line port of the Java loop — at this scale (~1,500 stocks × ~500 trading days × 5 indexes) a naive per-day recomputation would be too slow to run as a daily job. Validated against a naive per-date reimplementation of the same formula for exact numeric parity on real data before being finalized.
 
@@ -228,7 +228,7 @@ Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/ad
 | GET | `/:userId/engine-log` | This user's `daily_engine_log` rows, for filling calendar gaps in Trade History |
 | GET | `/:userId/benchmark` | Portfolio return vs. tracked index return, same period |
 | GET | `/engine-status` | Whether today is a trading day and whether Job 1 / Job 2 have run |
-| GET | `/metrics` | Health, last scoring run, trade counts |
+| GET | `/metrics` | Health, last scoring run, trade counts, email delivery status |
 
 Every `:userId` route checks that the caller's token actually belongs to that user. That wasn't always true — see below.
 

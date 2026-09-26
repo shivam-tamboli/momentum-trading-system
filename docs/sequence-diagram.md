@@ -1,6 +1,6 @@
 # Sequence Diagrams
 
-The three jobs that run automatically every trading day. Job 1 and Job 2 are triggered by an in-process poller checking Alpaca's own market clock every 60 seconds (not a fixed cron time); Job 3 runs on a plain fixed-time cron, since it only needs to happen well after close.
+The three jobs that run automatically every trading day, plus the separate daily backtest job. Job 1 and Job 2 are triggered by an in-process poller checking Alpaca's own market clock every 60 seconds (not a fixed cron time); Job 3 and the backtest job both run on a plain fixed-time cron, since neither needs to happen at a precise market-relative moment — just sometime after close.
 
 ## 1. Job 1 — Daily Scoring
 
@@ -92,5 +92,27 @@ sequenceDiagram
         else still genuinely open
             Note over Service: leave it PENDING, try again tomorrow
         end
+    end
+```
+
+## 4. Backtest — Daily historical simulation (not one of the three jobs above)
+
+A separate Python process, not the Spring Boot app — no `Service` participant here because there isn't one; `scripts/backtest.py` talks to Alpaca and Postgres directly.
+
+```mermaid
+sequenceDiagram
+    participant Scheduler as GitHub Actions (cron)
+    participant Script as scripts/backtest.py
+    participant Alpaca as Alpaca (System Key)
+    participant DB
+
+    Scheduler->>Script: fixed cron, 22:00 UTC, weekdays
+    Script->>DB: read each index's last stored result_date (if any)
+    Script->>Alpaca: fetch daily bars, same 4 constituent files as the live backend
+
+    loop each of the 5 tracked indexes
+        Script->>Script: same momentum formula as Job 1, applied to every historical trading day
+        Script->>Script: simulate equal-weighted top-5 portfolio vs. benchmark ETF
+        Script->>DB: insert only the days strictly after that index's last stored row
     end
 ```

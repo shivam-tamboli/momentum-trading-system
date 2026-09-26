@@ -10,6 +10,8 @@ This is a daily automatic rebalancing system. A momentum algorithm runs every tr
 
 **Users do not pick stocks, and users do not click a button to trade. The algorithm decides, and the schedule executes it.** The only trade a user directly causes is switching their tracked index, which immediately sells everything and buys the new index's top 5 (market permitting) rather than waiting for the next scheduled run.
 
+A separate daily process (not part of the Spring Boot app — see section 9) walks the same formula backward across 2 years of history per index, so the algorithm's actual past performance can be shown against a benchmark ETF, not just today's picks.
+
 ---
 
 ## 2. Two API Keys — Critical to Understand
@@ -44,7 +46,7 @@ To get a user's positions: call `GET /positions` with their key → Alpaca retur
 
 ---
 
-## 4. Database — 6 tables
+## 4. Database — 7 tables
 
 **Do not add a wallet or positions table.** Alpaca is the source of truth for both; this system never mirrors either into its own database.
 
@@ -128,6 +130,18 @@ job1_failed_alert_date  DATE                 -- so the "scoring failed today" em
 ```
 Survives restarts on purpose — this state used to live only in memory, and a restart between Job 1 succeeding and Job 2 firing used to silently skip an entire trading day for every user.
 
+### `backtest_result`
+```sql
+id              BIGINT PRIMARY KEY
+index_name      VARCHAR NOT NULL   -- same 5 filter-name values as daily_recommendation
+result_date     DATE NOT NULL      -- unique per (index_name, result_date)
+portfolio_value DECIMAL NOT NULL   -- normalized index, starts at 100 — never a dollar amount
+benchmark_value DECIMAL NOT NULL   -- same normalization, that index's benchmark ETF
+top5_symbols    TEXT               -- comma-separated, that day's simulated top 5
+created_at      TIMESTAMP
+```
+Global, not per user, like `daily_recommendation`. Written only by `scripts/backtest.py` — a separate Python process, run daily by `.github/workflows/backtest.yml`, not the Spring Boot app. The backend only ever reads this table (`GET /backtest/{index}`); it never computes or writes a row here itself. See section 9 below.
+
 ---
 
 ## 5. Algorithm — Momentum Formula
@@ -187,7 +201,20 @@ This runs automatically, once per trading day, before market open. No user trigg
 
 ---
 
-## 9. Security Rules
+## 9. Backtest — Separate Process (do not confuse with Job 1)
+
+`scripts/backtest.py`, run daily at 22:00 UTC (weekdays) by `.github/workflows/backtest.yml` — not part of the Spring Boot app, not triggered by `DailyEngineSchedulerService`, and not something the app ever calls.
+
+- Applies the exact same formula as section 5 to every historical trading day over the last 2 years (not just today), per index, and simulates an equal-weighted portfolio that rebalances to that day's top 5 — compared against that index's benchmark ETF compounding its own real daily returns over the same range.
+- Reads the same 4 constituent text files as the live backend (`backend/src/main/resources/index-constituents/`) — never a separate data source.
+- Uses the **system** Alpaca key only, for historical bars — same rule as Job 1, never a user key, never for placing trades. This script places no trades at all.
+- Connects to the same Postgres database directly (`psycopg2`, not JPA) and writes only to `backtest_result`. Needs its own copies of `ALPACA_SYSTEM_API_KEY`, `ALPACA_SYSTEM_API_SECRET`, `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` as GitHub Actions repository secrets — separate from the Spring Boot app's Render environment variables, even though the values are the same.
+- First run per index backfills 2 years from a base value of 100 (both series). Every run after continues from that index's own last stored row — never refetches or recomputes the full range again.
+- `GET /backtest/{index}` (see section 6) is read-only — the backend serves whatever's stored and never computes or writes a backtest result itself.
+
+---
+
+## 10. Security Rules
 
 - Passwords: handled entirely by Supabase Auth — never stored here.
 - Alpaca key/secret: AES-256-GCM encrypted before storing, keyed by `ENCRYPTION_KEY` — the app refuses to start if this isn't set, on purpose, rather than silently falling back to storing plaintext.
@@ -199,7 +226,7 @@ This runs automatically, once per trading day, before market open. No user trigg
 
 ---
 
-## 10. Environment Variables
+## 11. Environment Variables
 
 Alpaca system account (market data only, never trading):
 ```
@@ -239,7 +266,7 @@ ADMIN_SECRET_KEY=
 
 ---
 
-## 11. Maven Dependencies (current, `backend/pom.xml`)
+## 12. Maven Dependencies (current, `backend/pom.xml`)
 
 ```xml
 <!-- Alpaca Java SDK -->
@@ -315,7 +342,7 @@ There is no `spring-boot-starter-mail` — it was removed when email moved from 
 
 ---
 
-## 12. Key Rules
+## 13. Key Rules
 
 1. Never create a wallet or positions table — Alpaca is the source of truth for both.
 2. Never store the momentum formula's weights in the database — they're constants in `DailyScoringService`.
@@ -327,3 +354,4 @@ There is no `spring-boot-starter-mail` — it was removed when email moved from 
 8. `daily_engine_log` gets a row every trading day regardless of outcome, including days with zero trades — a blank gap and "the system ran and correctly found nothing to do" must never look the same.
 9. Every `:userId` route must verify the caller's token actually resolves to that `userId` before touching anything. This is not optional and was, for a period, missing entirely.
 10. A failed non-critical operation (an email send, a `daily_engine_log` write) must never be allowed to abort the trading run it's reporting on. Log it, track it, move on.
+11. `backtest_result` is written only by `scripts/backtest.py`. Never write to it from the Spring Boot app, and never use a user's Alpaca key for it — same system-key-only rule as Job 1.

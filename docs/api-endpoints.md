@@ -23,6 +23,11 @@ Every route needs a Supabase JWT in `Authorization: Bearer <token>`, except `/ad
 | GET | `/recommendations/sp600` | Today's top 5, S&P 600 | none | same shape |
 | GET | `/recommendations/nasdaq100` | Today's top 5, Nasdaq 100 | none | same shape |
 | GET | `/recommendations/full-market` | Today's top 5 across the whole ~1,500-stock scored universe | none | same shape |
+| GET | `/backtest/snp500` | 2-year walk-forward simulation vs. benchmark ETF, S&P 500 | none | `{ index_name, etf_symbol, points: [ { date, portfolio_value, benchmark_value, top5_symbols } ] }` |
+| GET | `/backtest/sp400` | Same, S&P 400 | none | same shape |
+| GET | `/backtest/sp600` | Same, S&P 600 | none | same shape |
+| GET | `/backtest/nasdaq100` | Same, Nasdaq 100 | none | same shape |
+| GET | `/backtest/full-market` | Same, Full Market | none | same shape |
 | GET | `/index-price-history?index=` | 30-day price history for an index's tracking ETF | none | `{ index, etf_symbol, points: [ { date, close } ] }` |
 | GET | `/stock-price-history?symbols=` | 14-day price history for a comma-separated list of symbols (sparklines) | none | `{ "<symbol>": [ { date, close } ], ... }` |
 | GET | `/metrics` | Health, last scoring run, trade counts, email delivery status | none | `{ health, algorithm, trading, database, email }` |
@@ -37,3 +42,4 @@ Notes:
 - There's no `/wallet/add-funds` endpoint — Alpaca paper accounts start with $100,000 automatically.
 - There's no manual `/trade/buy` or `/trade/sell` endpoint — trading isn't something a user triggers. Job 2 runs automatically every trading day and rebalances every connected account to that day's top 5 for their chosen index. The only way to cause an immediate trade outside that daily run is switching your tracked index, which sells everything and buys the new index's top 5 right away (market permitting).
 - `X-Admin-Key` is reserved for the handful of routes that actually place orders or run scoring — `/metrics` used to live under `/admin/` too, but moved to plain JWT auth since the frontend has nowhere secure to hold an admin key (anything shipped in client JS is readable via devtools).
+- The `/backtest/*` routes are read-only, same as `/recommendations/*` — they just serve whatever `scripts/backtest.py` last wrote to `backtest_result`. The backend never computes or writes a backtest itself.

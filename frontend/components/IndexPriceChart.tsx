@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
-import { createChart, LineSeries, ColorType, type IChartApi, type Time } from 'lightweight-charts';
+import { createChart, AreaSeries, ColorType, type IChartApi, type Time } from 'lightweight-charts';
 import { useTheme } from 'next-themes';
 import { TrendingUp } from 'lucide-react';
 import { Skeleton } from '@/components/ui/skeleton';
@@ -67,9 +67,16 @@ export function IndexPriceChart({ points, isLoading, isError }: IndexPriceChartP
         autoSize: true,
       });
 
-      const series = chart.addSeries(LineSeries, {
-        color: lineColor,
+      // AreaSeries, not LineSeries — same gradient-fill technique Sparkline already uses: a solid
+      // line plus a fill that fades from the line's own color at ~20% opacity (hex alpha `33`) to
+      // fully transparent (`00`), so an uptrend gets a green-tinted fill and a downtrend a
+      // red-tinted one, matching the line above it rather than a fill color fixed regardless of
+      // trend.
+      const series = chart.addSeries(AreaSeries, {
+        lineColor: lineColor,
         lineWidth: 2,
+        topColor: `${lineColor}33`,
+        bottomColor: `${lineColor}00`,
         priceFormat: { type: 'custom', formatter: (v: number) => `$${v.toFixed(2)}` },
       });
 

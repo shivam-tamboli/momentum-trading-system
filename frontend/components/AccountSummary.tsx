@@ -1,7 +1,6 @@
 'use client';
 
 import { Card, CardContent } from '@/components/ui/card';
-import { Separator } from '@/components/ui/separator';
 import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCountUp } from '@/lib/useCountUp';
@@ -45,47 +44,83 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
   }
 
   return (
-    <Card>
-      <CardContent className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
-        <div className="flex-1">
-          <p className="text-sm font-medium text-muted-foreground">Portfolio Value</p>
+    <div className="grid grid-cols-1 gap-4 sm:grid-cols-5">
+      <Card className="sm:col-span-2">
+        <CardContent>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Portfolio Value
+          </p>
           {isLoading || account?.portfolio_value === undefined ? (
-            <Skeleton className="mt-2 h-12 w-48" />
+            <Skeleton className="mt-2 h-10 w-40" />
           ) : (
-            <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span className="font-mono text-5xl font-bold tracking-tight tabular-nums sm:text-6xl">
-                {currency.format(animatedPortfolioValue ?? account.portfolio_value)}
-              </span>
-              {hasDelta && (
-                <span
-                  className={cn(
-                    'font-mono text-lg font-semibold tabular-nums sm:text-xl',
-                    isPositiveDelta ? 'text-gain' : 'text-loss'
-                  )}
-                >
-                  ({isPositiveDelta ? '+' : '−'}
-                  {currency.format(Math.abs(dayDelta))} · {isPositiveDelta ? '+' : '−'}
-                  {percent.format(Math.abs(dayDeltaPercent))} today)
-                </span>
-              )}
+            <p className="mt-2 font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+              {currency.format(animatedPortfolioValue ?? account.portfolio_value)}
             </p>
           )}
-        </div>
+        </CardContent>
+      </Card>
 
-        <Separator className="sm:hidden" />
-        <Separator orientation="vertical" className="hidden self-stretch sm:block" />
-
-        <div className="sm:w-40 sm:shrink-0">
+      <Card>
+        <CardContent>
           <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cash</p>
           {isLoading || account?.cash === undefined ? (
-            <Skeleton className="mt-2 h-6 w-20" />
+            <Skeleton className="mt-2 h-8 w-20" />
           ) : (
-            <p className="mt-1 font-mono text-xl font-medium text-muted-foreground tabular-nums">
+            <p className="mt-2 font-mono text-2xl font-bold tabular-nums">
               {currency.format(account.cash)}
             </p>
           )}
-        </div>
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Today&apos;s P&amp;L
+          </p>
+          {isLoading ? (
+            <Skeleton className="mt-2 h-8 w-20" />
+          ) : hasDelta ? (
+            <>
+              <p
+                className={cn(
+                  'mt-2 font-mono text-2xl font-bold tabular-nums',
+                  isPositiveDelta ? 'text-gain' : 'text-loss'
+                )}
+              >
+                {isPositiveDelta ? '+' : '−'}
+                {currency.format(Math.abs(dayDelta))}
+              </p>
+              <p
+                className={cn(
+                  'font-mono text-xs font-medium tabular-nums',
+                  isPositiveDelta ? 'text-gain' : 'text-loss'
+                )}
+              >
+                {isPositiveDelta ? '+' : '−'}
+                {percent.format(Math.abs(dayDeltaPercent))}
+              </p>
+            </>
+          ) : (
+            <p className="mt-2 font-mono text-2xl font-bold text-muted-foreground">—</p>
+          )}
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardContent>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">
+            Buying Power
+          </p>
+          {isLoading || account?.buying_power === undefined ? (
+            <Skeleton className="mt-2 h-8 w-20" />
+          ) : (
+            <p className="mt-2 font-mono text-2xl font-bold tabular-nums">
+              {currency.format(account.buying_power)}
+            </p>
+          )}
+        </CardContent>
+      </Card>
+    </div>
   );
 }

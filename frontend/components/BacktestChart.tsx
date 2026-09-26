@@ -19,20 +19,19 @@ interface BacktestChartProps {
 // Same real compiled hex values IndexPriceChart already uses for mutedForeground/gridLine — the
 // benchmark line reuses that exact neutral gray rather than gain/loss green or red, since it isn't
 // itself a gain or a loss, just the other series being compared against. The portfolio line uses
-// this app's one deliberate accent color (see ARCHITECTURE.md) instead — real hex, computed once
-// from the same oklch values --primary/--chart-1 resolve to, not a fresh color invented for this
-// chart.
+// this app's one deliberate accent color instead — real hex, computed once from the same oklch
+// values --primary/--chart-1 resolve to, not a fresh color invented for this chart.
 const PALETTES = {
   light: {
     mutedForeground: '#737373',
     gridLine: 'rgba(0, 0, 0, 0.06)',
-    portfolio: '#2563eb',
+    portfolio: '#007f20',
     benchmark: '#737373',
   },
   dark: {
     mutedForeground: '#a1a1a1',
     gridLine: 'rgba(255, 255, 255, 0.06)',
-    portfolio: '#2b7fff',
+    portfolio: '#00963e',
     benchmark: '#a1a1a1',
   },
 } as const;

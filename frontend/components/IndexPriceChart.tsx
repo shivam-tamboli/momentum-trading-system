@@ -27,7 +27,7 @@ const PALETTES = {
   dark: {
     mutedForeground: '#a1a1a1',
     gridLine: 'rgba(255, 255, 255, 0.06)',
-    gain: '#00c565',
+    gain: '#39c34b',
     loss: '#ff6568',
   },
 } as const;

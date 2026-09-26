@@ -158,7 +158,9 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Benchmark Comparison</CardTitle>
+          <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Benchmark Comparison
+          </CardTitle>
           <CardDescription>How your portfolio has performed against your tracked index.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -172,7 +174,9 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Portfolio Composition</CardTitle>
+          <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Portfolio Composition
+          </CardTitle>
           <CardDescription>How your investment is split across your current holdings.</CardDescription>
         </CardHeader>
         <CardContent>
@@ -188,7 +192,9 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Your Positions</CardTitle>
+          <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Your Positions
+          </CardTitle>
         </CardHeader>
         <CardContent>
           <PositionsTable
@@ -211,7 +217,9 @@ export default function DashboardPage() {
       {selectedIndex && (
         <Card>
           <CardHeader>
-            <CardTitle>{selectedIndex} — 30 Day Price</CardTitle>
+            <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+              {selectedIndex} — 30 Day Price
+            </CardTitle>
             <CardDescription>
               {indexPriceQuery.data?.etf_symbol ?? '—'}, the ETF tracking {selectedIndex}.
             </CardDescription>
@@ -228,7 +236,7 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>
+          <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
             {topFiveHeading}
             {selectedIndex ? ` — ${selectedIndex}` : ''}
           </CardTitle>
@@ -253,7 +261,9 @@ export default function DashboardPage() {
 
       <Card>
         <CardHeader>
-          <CardTitle>Trade History</CardTitle>
+          <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+            Trade History
+          </CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <TradeHistoryTable

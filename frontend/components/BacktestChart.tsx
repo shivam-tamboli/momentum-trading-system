@@ -31,7 +31,7 @@ const PALETTES = {
   dark: {
     mutedForeground: '#a1a1a1',
     gridLine: 'rgba(255, 255, 255, 0.06)',
-    portfolio: '#00963e',
+    portfolio: '#39c34b',
     benchmark: '#a1a1a1',
   },
 } as const;

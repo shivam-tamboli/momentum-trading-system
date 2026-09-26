@@ -35,7 +35,9 @@ export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading, 
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Algorithm Status</CardTitle>
+        <CardTitle className="text-sm font-semibold tracking-wider text-muted-foreground uppercase">
+          Algorithm Status
+        </CardTitle>
       </CardHeader>
       <CardContent className="space-y-3">
         {isLoading ? (

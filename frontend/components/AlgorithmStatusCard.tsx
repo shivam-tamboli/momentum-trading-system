@@ -46,19 +46,17 @@ export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading, 
           <p className="text-sm text-muted-foreground">The algorithm hasn&apos;t run yet.</p>
         ) : (
           <>
-            <p className="text-sm text-muted-foreground">
-              Last ran:{' '}
-              <span className="font-mono font-medium text-foreground tabular-nums">
-                {formatFullDateTime(scoredAt)}
-              </span>
-            </p>
-
-            <div className={cn('rounded-md border px-3 py-2 text-sm font-medium', STATUS_STYLES[scoringState])}>
+            <div
+              className={cn(
+                'rounded-lg border px-4 py-3 text-sm font-semibold',
+                STATUS_STYLES[scoringState]
+              )}
+            >
               {scoringState === 'live' ? (
-                <span className="flex items-center gap-2">
-                  <span className="relative flex h-2 w-2">
+                <span className="flex items-center gap-2.5">
+                  <span className="relative flex h-2.5 w-2.5">
                     <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-gain opacity-75" />
-                    <span className="relative inline-flex h-2 w-2 rounded-full bg-gain" />
+                    <span className="relative inline-flex h-2.5 w-2.5 rounded-full bg-gain" />
                   </span>
                   Today&apos;s scores are live
                 </span>
@@ -72,10 +70,20 @@ export function AlgorithmStatusCard({ recommendations, engineStatus, isLoading, 
               )}
             </div>
 
-            <p className="text-xs text-muted-foreground">
-              Next run:{' '}
-              <span className="font-mono tabular-nums">{formatNextRun(getNextScoringRun())}</span>
-            </p>
+            <div className="flex flex-col gap-1 sm:flex-row sm:items-baseline sm:justify-between">
+              <p className="text-sm text-muted-foreground">
+                Last ran:{' '}
+                <span className="font-mono text-sm font-semibold text-foreground tabular-nums">
+                  {formatFullDateTime(scoredAt)}
+                </span>
+              </p>
+              <p className="text-xs text-muted-foreground/80">
+                Next run:{' '}
+                <span className="font-mono text-xs font-medium text-muted-foreground tabular-nums">
+                  {formatNextRun(getNextScoringRun())}
+                </span>
+              </p>
+            </div>
           </>
         )}
       </CardContent>

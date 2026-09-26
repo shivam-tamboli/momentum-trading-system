@@ -1,6 +1,7 @@
 'use client';
 
-import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card';
+import { Card, CardContent } from '@/components/ui/card';
+import { Separator } from '@/components/ui/separator';
 import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
 import { useCountUp } from '@/lib/useCountUp';
@@ -44,19 +45,15 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
   }
 
   return (
-    <div className="grid gap-4 lg:grid-cols-3 lg:items-start">
-      <Card className="lg:col-span-2">
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">
-            Portfolio Value
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
+    <Card>
+      <CardContent className="flex flex-col gap-5 sm:flex-row sm:items-center sm:gap-6">
+        <div className="flex-1">
+          <p className="text-sm font-medium text-muted-foreground">Portfolio Value</p>
           {isLoading || account?.portfolio_value === undefined ? (
-            <Skeleton className="h-12 w-48" />
+            <Skeleton className="mt-2 h-12 w-48" />
           ) : (
-            <p className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-              <span className="font-mono text-4xl font-bold tracking-tight tabular-nums sm:text-5xl">
+            <p className="mt-1 flex flex-wrap items-baseline gap-x-2 gap-y-1">
+              <span className="font-mono text-5xl font-bold tracking-tight tabular-nums sm:text-6xl">
                 {currency.format(animatedPortfolioValue ?? account.portfolio_value)}
               </span>
               {hasDelta && (
@@ -73,23 +70,22 @@ export function AccountSummary({ account, isLoading, isError }: AccountSummaryPr
               )}
             </p>
           )}
-        </CardContent>
-      </Card>
+        </div>
 
-      <Card>
-        <CardHeader className="pb-2">
-          <CardTitle className="text-sm font-medium text-muted-foreground">Cash</CardTitle>
-        </CardHeader>
-        <CardContent>
+        <Separator className="sm:hidden" />
+        <Separator orientation="vertical" className="hidden self-stretch sm:block" />
+
+        <div className="sm:w-40 sm:shrink-0">
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-wide">Cash</p>
           {isLoading || account?.cash === undefined ? (
-            <Skeleton className="h-8 w-24" />
+            <Skeleton className="mt-2 h-6 w-20" />
           ) : (
-            <p className="font-mono text-2xl font-bold tabular-nums">
+            <p className="mt-1 font-mono text-xl font-medium text-muted-foreground tabular-nums">
               {currency.format(account.cash)}
             </p>
           )}
-        </CardContent>
-      </Card>
-    </div>
+        </div>
+      </CardContent>
+    </Card>
   );
 }

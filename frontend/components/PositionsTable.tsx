@@ -10,7 +10,7 @@ import {
 import { Skeleton } from '@/components/ui/skeleton';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
-import { cn } from '@/lib/utils';
+import { cn, shortCompanyName } from '@/lib/utils';
 import type { PositionItem } from '@/lib/types';
 
 const currency = new Intl.NumberFormat('en-US', { style: 'currency', currency: 'USD' });
@@ -83,7 +83,7 @@ export function PositionsTable({ positions, isLoading, isError }: PositionsTable
             return (
               <TableRow key={position.symbol}>
                 <TableCell className="font-medium">{position.symbol}</TableCell>
-                <TableCell className="text-muted-foreground">{position.name}</TableCell>
+                <TableCell className="text-muted-foreground">{shortCompanyName(position.name)}</TableCell>
                 <TableCell className="text-right font-mono tabular-nums">
                   {currency.format(position.current_price)}
                 </TableCell>

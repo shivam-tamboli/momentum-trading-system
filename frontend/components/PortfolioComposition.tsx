@@ -2,7 +2,7 @@ import { PieChart } from 'lucide-react';
 import { EmptyState } from '@/components/EmptyState';
 import { ErrorState } from '@/components/ErrorState';
 import { Skeleton } from '@/components/ui/skeleton';
-import { cn } from '@/lib/utils';
+import { cn, shortCompanyName } from '@/lib/utils';
 import type { PositionItem } from '@/lib/types';
 
 interface PortfolioCompositionProps {
@@ -33,32 +33,10 @@ const percent = new Intl.NumberFormat('en-US', {
   maximumFractionDigits: 1,
 });
 
-const SIZE = 200;
-const STROKE = 32;
+const SIZE = 240;
+const STROKE = 36;
 const RADIUS = (SIZE - STROKE) / 2;
 const CIRCUMFERENCE = 2 * Math.PI * RADIUS;
-
-// Legend space is tight and Alpaca/exchange-provided names carry a lot of boilerplate a ticker
-// symbol already implies ("Moderna, Inc. Common Stock" — the "Inc." and "Common Stock" tell a
-// reader nothing the MRNA badge next to it doesn't). Order matters: the more specific patterns
-// ("Incorporated", "Corporation") run before the short, generic ones ("Inc", "Corp") so the short
-// ones can't match a prefix of the long ones and leave a mangled remainder behind.
-const NAME_SUFFIX_PATTERNS: RegExp[] = [
-  /\bCommon Stock\b/gi,
-  /\bClass [A-Z]\b/gi,
-  /\bIncorporated\b/gi,
-  /\bCorporation\b/gi,
-  /\bCorp\.?(?![a-zA-Z])/gi,
-  /\bInc\.?(?![a-zA-Z])/gi,
-];
-
-function shortCompanyName(name: string): string {
-  let result = name;
-  for (const pattern of NAME_SUFFIX_PATTERNS) {
-    result = result.replace(pattern, ' ');
-  }
-  return result.replace(/\s*,\s*/g, ' ').replace(/\s+/g, ' ').trim();
-}
 
 export function PortfolioComposition({ positions, isLoading, isError }: PortfolioCompositionProps) {
   if (isLoading) {
@@ -127,16 +105,16 @@ export function PortfolioComposition({ positions, isLoading, isError }: Portfoli
           />
         ))}
       </svg>
-      <div className="w-full min-w-0 flex-1 space-y-2">
+      <div className="w-full min-w-0 flex-1 divide-y divide-border/50">
         {slices.map(({ position, share, colorIndex }) => (
-          <div key={position.symbol} className="flex items-center justify-between gap-3 text-sm">
+          <div key={position.symbol} className="flex items-center justify-between gap-3 py-2.5 text-sm first:pt-0 last:pb-0">
             <div className="flex min-w-0 items-center gap-2">
               <span className={cn('h-2.5 w-2.5 shrink-0 rounded-full', SLICE_DOT[colorIndex])} />
               <span className="font-bold">{position.symbol}</span>
               <span className="truncate text-muted-foreground">{shortCompanyName(position.name)}</span>
             </div>
             <div className="flex shrink-0 items-center gap-3 font-mono tabular-nums">
-              <span>{currency.format(position.market_value)}</span>
+              <span className="min-w-20 text-right">{currency.format(position.market_value)}</span>
               <span className="w-12 text-right text-muted-foreground">{percent.format(share)}</span>
             </div>
           </div>

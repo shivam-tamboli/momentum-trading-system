@@ -81,10 +81,10 @@ export function BenchmarkComparison({ benchmark, isLoading, isError }: Benchmark
     <div className="space-y-4">
       <p
         className={cn(
-          'rounded-md border px-3 py-2 text-sm font-medium',
+          'rounded-md border px-3 py-2 text-sm',
           isBeating
-            ? 'border-gain/50 bg-gain/10 text-gain'
-            : 'border-loss/50 bg-loss/10 text-loss'
+            ? 'border-gain/50 bg-gain/10 font-medium text-gain'
+            : 'border-loss/30 bg-loss/5 text-loss/90'
         )}
       >
         {isBeating ? '▲ Beating' : '▼ Trailing'} {benchmark.selected_index} ({benchmark.index_symbol}) by{' '}
@@ -92,10 +92,10 @@ export function BenchmarkComparison({ benchmark, isLoading, isError }: Benchmark
         {benchmark.period_start && ` since ${formatPeriodStart(benchmark.period_start)}`}
       </p>
 
-      <div className="grid grid-cols-2 gap-4">
+      <div className="grid grid-cols-2 gap-5">
         <div
           className={cn(
-            'rounded-lg border-t-4 bg-muted/20 px-4 py-4',
+            'rounded-lg border border-border/60 border-t-4 bg-muted/20 px-4 py-5',
             portfolioPct >= 0 ? 'border-t-gain' : 'border-t-loss'
           )}
         >
@@ -104,7 +104,7 @@ export function BenchmarkComparison({ benchmark, isLoading, isError }: Benchmark
           </p>
           <p
             className={cn(
-              'mt-1.5 font-mono text-3xl font-extrabold tabular-nums',
+              'mt-2 font-mono text-4xl font-extrabold tabular-nums',
               portfolioPct >= 0 ? 'text-gain' : 'text-loss'
             )}
           >
@@ -113,7 +113,7 @@ export function BenchmarkComparison({ benchmark, isLoading, isError }: Benchmark
         </div>
         <div
           className={cn(
-            'rounded-lg border-t-4 bg-muted/20 px-4 py-4',
+            'rounded-lg border border-border/60 border-t-4 bg-muted/20 px-4 py-5',
             indexPct >= 0 ? 'border-t-gain' : 'border-t-loss'
           )}
         >
@@ -122,7 +122,7 @@ export function BenchmarkComparison({ benchmark, isLoading, isError }: Benchmark
           </p>
           <p
             className={cn(
-              'mt-1.5 font-mono text-3xl font-extrabold tabular-nums',
+              'mt-2 font-mono text-4xl font-extrabold tabular-nums',
               indexPct >= 0 ? 'text-gain' : 'text-loss'
             )}
           >
